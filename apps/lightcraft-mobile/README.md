@@ -44,8 +44,12 @@ orientation, iPad Split View and phone browsers:
   Remove, Masking, Info …). The sheet shows that panel at full width; Hide puts it away. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.
-- **My Photos:** a full-width drawer (a column at the left in landscape) that closes when you
-  pick a source.
+- **My Photos:** a full-width drawer (a column at the left in landscape) with a direct Import
+  Photos button, All Photos, Recently Added, Picks, Recently Deleted and the album/folder tree.
+  Create opens the existing album/folder menu. Picking a photo source closes the drawer. Removing
+  a photo from an album keeps it in All Photos; deleting it moves it to Recently Deleted.
+  With photos selected, **Organize** in the bottom bar offers Add to Album, Remove from Album,
+  Move to Recently Deleted, and Restore Photos in Recently Deleted.
 - **Grid:** about three thumbnails across the screen's short side, so landscape shows more of
   them, and two rows at least.
 - **Filter bar:** its groups wrap onto as many rows as they need.

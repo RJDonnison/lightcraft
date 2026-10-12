@@ -144,6 +144,86 @@ fn the_phone_grid_shows_info_in_the_sheet() {
     assert!(widget(&h, "panel:sheet").is_some(), "the sheet is up");
 }
 
+#[test]
+fn phone_library_navigates_album_and_trash_without_losing_catalog_photos() {
+    let mut h = touch_app(ViewMode::PhotoGrid, [390.0, 844.0]);
+    let id = h.app.session.visible()[0].0;
+    let album = h.app.run("album.create", json!({"name": "Trip"})).unwrap()["id"]
+        .as_u64()
+        .unwrap();
+    h.step();
+
+    let click = |h: &mut Headless, id: &str| {
+        let r = h.request("ui.clickWidget", json!({"id": id}), Duration::from_secs(20));
+        assert_eq!(r["ok"], true, "{id}: {r}");
+        h.step();
+        h.step();
+    };
+    click(&mut h, "icon:sidebar");
+    assert!(widget(&h, "button:libraryImport").is_some());
+    assert!(widget(&h, "button:libraryCreateAlbum").is_some());
+    click(&mut h, "source:all");
+    h.app.run("library.select", json!({"ids": [id]})).unwrap();
+    click(&mut h, "icon:organize");
+    click(&mut h, "button:organizeAdd");
+    click(&mut h, &format!("button:organizeAlbum:{album}"));
+    assert!(
+        h.app.session.catalog.album(lightcraft_catalog::AlbumId(album)).is_some_and(|a| a.photos.contains(&lightcraft_catalog::PhotoId(id))),
+        "the phone action adds the selected library photo to the album"
+    );
+    click(&mut h, "icon:sidebar");
+    click(&mut h, &format!("source:album:{album}"));
+    assert_eq!(
+        h.app.session.source,
+        lightcraft_engine::LibrarySource::Album(lightcraft_catalog::AlbumId(album))
+    );
+    assert!(!h.app.ui.left_panel);
+    h.app.run("library.select", json!({"ids": [id]})).unwrap();
+    click(&mut h, "icon:organize");
+    click(&mut h, "button:organizeRemove");
+    assert!(
+        h.app.session.catalog.photo(lightcraft_catalog::PhotoId(id)).is_some(),
+        "removing membership keeps the catalog photo"
+    );
+    click(&mut h, "icon:sidebar");
+    click(&mut h, "source:all");
+    assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::All);
+    click(&mut h, "icon:sidebar");
+    click(&mut h, "source:all");
+    assert!(!h.app.ui.left_panel, "selecting the current source also closes the drawer");
+    h.app.run("library.select", json!({"ids": [id]})).unwrap();
+    click(&mut h, "icon:organize");
+    click(&mut h, "button:organizeDelete");
+    click(&mut h, "icon:sidebar");
+    click(&mut h, "source:recentlyDeleted");
+    assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::RecentlyDeleted);
+    assert!(h.app.session.catalog.photo(lightcraft_catalog::PhotoId(id)).is_some_and(|p| p.deleted));
+    h.app.run("library.select", json!({"ids": [id]})).unwrap();
+    click(&mut h, "icon:organize");
+    click(&mut h, "button:organizeRestore");
+    assert!(h.app.session.catalog.photo(lightcraft_catalog::PhotoId(id)).is_some_and(|p| !p.deleted));
+}
+
+#[test]
+fn phone_library_import_opens_the_host_photo_picker() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let mut h = touch_app(ViewMode::PhotoGrid, [390.0, 844.0]);
+    let asked = Arc::new(AtomicBool::new(false));
+    let called = asked.clone();
+    h.app.services.pick_files = Some(Box::new(move || {
+        called.store(true, Ordering::Relaxed);
+        Vec::new()
+    }));
+    let open = h.request("ui.clickWidget", json!({"id": "icon:sidebar"}), Duration::from_secs(20));
+    assert_eq!(open["ok"], true, "{open}");
+    h.step();
+    let import = h.request("ui.clickWidget", json!({"id": "button:libraryImport"}), Duration::from_secs(20));
+    assert_eq!(import["ok"], true, "{import}");
+    assert!(asked.load(Ordering::Relaxed), "the phone library uses the host picker");
+}
+
 /// The phone grid has no thumbnail slider: pinching out shows fewer photos across, in more.
 #[test]
 fn pinching_the_phone_grid_changes_how_many_photos_go_across() {

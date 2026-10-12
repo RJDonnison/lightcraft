@@ -7,6 +7,7 @@ plan/
 /log
 .DS_Store
 .claude/
+.opencode/
 /craft-fonts
 # nix build / nix develop
 /result

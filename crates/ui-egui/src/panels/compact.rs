@@ -231,6 +231,8 @@ fn bottombar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             );
             right.spacing_mut().item_spacing.x = 2.0;
             let has_photo = app.session.active().is_some();
+            let organize = icon_button(&mut right, "organize", Icon::More, BUTTON, false, has_photo, "Organize Photos");
+            egui::Popup::menu(&organize).show(|ui| organize_menu(app, ui));
             // Edit: open the sheet on the Edit panel (from the grid too), or put it away
             if icon_button(&mut right, "edit", Icon::Sliders, BUTTON, sheet_open(app), has_photo, "Edit (E)").clicked() {
                 if sheet_open(app) {
@@ -250,6 +252,69 @@ fn bottombar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 app.ui.filmstrip = !app.ui.filmstrip;
             }
         });
+}
+
+/// Phone-accessible catalog actions for the current selection. Albums organize library photos;
+/// removing membership does not delete an original, while Delete moves it to Recently Deleted.
+fn organize_menu(app: &mut LightcraftApp, ui: &mut egui::Ui) {
+    let deleted = app.session.source == lightcraft_engine::LibrarySource::RecentlyDeleted;
+    if deleted {
+        let restore = ui.button(crate::i18n::tr("Restore Photos"));
+        register(ui.ctx(), "button:organizeRestore", restore.rect);
+        if restore.clicked() {
+            if let Err(e) = app.run("photo.restore", json!({})) {
+                app.toast(ui.ctx(), e);
+            }
+            ui.close();
+        }
+        return;
+    }
+    let local_only = super::grid::local_only(app, &app.session.targets(&serde_json::Value::Null));
+    ui.add_enabled_ui(!local_only, |ui| {
+        let add = ui.menu_button(crate::i18n::tr("Add to Album"), |ui| {
+            let albums: Vec<_> = app.session.catalog.albums().filter(|a| !a.folder && !a.is_smart()).map(|a| (a.id.0, a.name.clone())).collect();
+            for (id, name) in albums {
+                let add = ui.button(name);
+                register(ui.ctx(), format!("button:organizeAlbum:{id}"), add.rect);
+                if add.clicked() {
+                    match app.run("album.addPhotos", json!({"id": id})) {
+                        Ok(r) => super::grid::toast_skipped(app, ui.ctx(), &r),
+                        Err(e) => app.toast(ui.ctx(), e),
+                    }
+                    ui.close();
+                }
+            }
+            if ui.button(crate::i18n::tr("New Album…")).clicked() {
+                if let Err(e) = app.run("dialog.newAlbum", json!({})) {
+                    app.toast(ui.ctx(), e);
+                }
+                ui.close();
+            }
+        });
+        register(ui.ctx(), "button:organizeAdd", add.response.rect);
+        add.response.on_disabled_hover_text(super::grid::albums_hint());
+    });
+    if let lightcraft_engine::LibrarySource::Album(id) = app.session.source
+        && app.session.catalog.album(id).is_some_and(|a| !a.is_smart())
+    {
+        let remove = ui.button(crate::i18n::tr("Remove from Album"));
+        register(ui.ctx(), "button:organizeRemove", remove.rect);
+        if remove.clicked() {
+            if let Err(e) = app.run("album.removePhotos", json!({"id": id.0})) {
+                app.toast(ui.ctx(), e);
+            }
+            ui.close();
+        }
+    }
+    ui.separator();
+    let delete = ui.button(crate::i18n::tr("Move to Recently Deleted"));
+    register(ui.ctx(), "button:organizeDelete", delete.rect);
+    if delete.clicked() {
+        if let Err(e) = app.run("photo.delete", json!({})) {
+            app.toast(ui.ctx(), e);
+        }
+        ui.close();
+    }
 }
 
 fn close_sheet(app: &mut LightcraftApp) {

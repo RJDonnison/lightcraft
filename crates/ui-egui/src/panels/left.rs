@@ -75,7 +75,12 @@ fn row_sensed(
 ) -> egui::Response {
     let label = if matches!(id, "all" | "recentlyAdded" | "picks" | "missing" | "recentlyDeleted") { crate::i18n::tr(label) } else { label };
     let t = Tokens::get(ui.ctx());
-    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 29.0), sense);
+    let height = if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+        44.0
+    } else {
+        29.0
+    };
+    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), height), sense);
     register(ui.ctx(), format!("source:{id}"), r);
     let said = spoken.unwrap_or(label);
     let name = match count {
@@ -559,6 +564,10 @@ fn new_album_menu(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 }
 
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
+    if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+        mobile_library(app, ui);
+        return;
+    }
     let t = Tokens::get(ui.ctx());
     let frame = egui::Frame::NONE.fill(t.chrome).stroke(egui::Stroke::new(1.0, t.divider));
     frame.show(ui, |ui| {
@@ -682,6 +691,61 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 ui.ctx().request_repaint();
             }
         });
+    });
+}
+
+/// A phone's library drawer: catalog-wide views first, then the album tree. The same catalog
+/// sources and album commands drive the desktop sidebar and this view.
+fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
+    let t = Tokens::get(ui.ctx());
+    egui::Frame::NONE.fill(t.chrome).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        ui.horizontal(|ui| {
+            ui.heading(crate::i18n::tr("My Photos"));
+            if let Some(name) = crate::panels::settings::open_library_name(app) {
+                ui.label(egui::RichText::new(name).color(t.text_dim).small());
+            }
+        });
+        // On Android this calls the platform photo picker; the picked files enter the regular
+        // import review and catalog rather than appearing only in the device's gallery.
+        let import = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(crate::i18n::tr("Import Photos…")));
+        register(ui.ctx(), "button:libraryImport", import.rect);
+        if import.clicked()
+            && let Err(e) = app.run("file.addPhotos", json!({}))
+        {
+            app.toast(ui.ctx(), e);
+        }
+        egui::ScrollArea::vertical()
+            .id_salt("mobile-library-scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                let counts = app.caches.counts(&app.session.catalog);
+                let source = app.session.source;
+                for (id, icon, label, count, target) in [
+                    ("all", Icon::Photos, "All Photos", Some(counts.total), LibrarySource::All),
+                    ("recentlyAdded", Icon::Clock, "Recently Added", None, LibrarySource::RecentlyAdded),
+                    ("picks", Icon::FlagPick, "Picks", Some(counts.picks), LibrarySource::Picks),
+                    ("recentlyDeleted", Icon::Trash, "Recently Deleted", Some(counts.deleted), LibrarySource::RecentlyDeleted),
+                ] {
+                    if row(app, ui, id, icon, label, count, source == target, 0.0).clicked() {
+                        if let Err(e) = app.run("library.source", json!({"kind": id})) {
+                            app.toast(ui.ctx(), e);
+                        } else {
+                            app.ui.left_panel = false;
+                        }
+                    }
+                }
+                ui.add_space(12.0);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(crate::i18n::tr("Albums")).strong());
+                    let new = ui.menu_button(crate::i18n::tr("Create"), |ui| new_album_menu(app, ui));
+                    register(ui.ctx(), "button:libraryCreateAlbum", new.response.rect);
+                });
+                let reveal = app.ui.reveal_album.take();
+                albums_rows(app, ui, reveal);
+                ui.add_space(12.0);
+            });
     });
 }
 
@@ -1204,7 +1268,11 @@ fn albums_tree(app: &mut LightcraftApp, ui: &mut egui::Ui, all: &AlbumKids, pare
                 resp = resp.on_hover_text(tip);
             }
             if resp.clicked() {
-                let _ = app.run("library.source", json!({"kind": "album", "id": a.id.0}));
+                if let Err(e) = app.run("library.source", json!({"kind": "album", "id": a.id.0})) {
+                    app.toast(ui.ctx(), e);
+                } else if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+                    app.ui.left_panel = false;
+                }
             }
             folder_menu(app, &resp, a);
         }
