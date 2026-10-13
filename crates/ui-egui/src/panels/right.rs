@@ -56,6 +56,10 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 RightPanel::None => {}
             }
             super::compact::keep_focus_visible(ui);
+            if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+                // Keep the last touch control above the sheet's edge and leave scroll room.
+                ui.add_space(16.0);
+            }
         });
     });
 }

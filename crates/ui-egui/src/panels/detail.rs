@@ -1262,6 +1262,17 @@ fn general_interaction(
         }
         return;
     }
+    // A single tap outside the phone controls dismisses the sheet. Drags still pan/swipe, and
+    // double taps still zoom; picker and on-image editing tools have already been handled above.
+    if super::compact::is_compact(ui.ctx())
+        && crate::widgets::touch_screen(ui.ctx())
+        && super::compact::sheet_open(app)
+        && resp.clicked()
+        && !resp.double_clicked()
+    {
+        super::compact::close_sheet(app);
+        return;
+    }
     // click toggles Fit ↔ the chosen click-zoom ratio at the clicked point; drag pans when zoomed
     let zoomed = img.width() > canvas.width() + 1.0 || img.height() > canvas.height() + 1.0;
     if !zoomed && swipe(app, ui, resp, canvas) {

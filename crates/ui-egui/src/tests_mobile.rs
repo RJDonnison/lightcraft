@@ -48,6 +48,27 @@ fn widget(h: &Headless, id: &str) -> Option<egui::Rect> {
     h.app.widgets.iter().find(|(w, _)| w == id).map(|(_, r)| *r)
 }
 
+#[test]
+fn phone_sheet_snaps_taller_and_dismisses_on_photo_tap() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    assert!(widget(&h, "panel:sheet").is_some());
+    assert!(widget(&h, "mobileSheet:handle").is_some());
+    assert!(widget(&h, "icon:sheetClose").is_none(), "no duplicate heading or Hide button");
+    let short = widget(&h, "panel:sheet").unwrap().height();
+    let handle = widget(&h, "mobileSheet:handle").unwrap().center();
+    tap(&mut h, handle);
+    let tall = widget(&h, "panel:sheet").unwrap().height();
+    assert!(tall > short + 100.0, "two useful sheet heights: {short} / {tall}");
+    let handle = widget(&h, "mobileSheet:handle").unwrap().center();
+    tap(&mut h, handle);
+    assert!((widget(&h, "panel:sheet").unwrap().height() - short).abs() < 2.0);
+
+    let canvas = h.app.canvas_rect.expect("photo canvas");
+    tap(&mut h, canvas.center());
+    assert!(widget(&h, "panel:sheet").is_none(), "tapping the photo dismisses controls");
+    assert_eq!(h.app.ui.zoom, crate::state::Zoom::Fit, "dismissal does not also zoom the photo");
+}
+
 /// Photos in the grid whose middle is on screen (between the header and `bottom`).
 fn thumbs(h: &Headless, bottom: f32) -> Vec<(u64, egui::Rect)> {
     h.app

@@ -408,9 +408,13 @@ fn organize_menu(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     }
 }
 
-fn close_sheet(app: &mut LightcraftApp) {
+pub(super) fn close_sheet(app: &mut LightcraftApp) {
     app.ui.right = RightPanel::None;
     app.ui.presets = false;
+}
+
+fn tall_sheet(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(egui::Id::new("mobile-sheet-tall"))).unwrap_or(false)
 }
 
 /// The bottom sheet: a row of tools, then the right panel or Presets at full width. In a wide
@@ -422,45 +426,28 @@ fn sheet(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         egui::Panel::right("compact_sheet_side").exact_size(side_width(avail.width()))
     } else {
         // the photo keeps the upper part; the sheet gets the rest, within reason
-        let height = (avail.height() * 0.5).clamp(220.0, (avail.height() - 160.0).max(220.0));
+        let fraction = if crate::widgets::touch_screen(ui.ctx()) && tall_sheet(ui.ctx()) { 0.8 } else { 0.5 };
+        let height = (avail.height() * fraction).clamp(220.0, (avail.height() - 120.0).max(220.0));
         egui::Panel::bottom("compact_sheet").exact_size(height)
     };
     panel.resizable(false).frame(egui::Frame::NONE.fill(t.chrome).stroke(Stroke::new(1.0, t.divider))).show(ui, |ui| {
         register(ui.ctx(), "panel:sheet", ui.max_rect());
-        egui::Panel::top("compact_sheet_tools")
-            .exact_size(BUTTON.y + 4.0)
-            // (inside the sheet's 1 pt border: its icons line up with the bars')
-            .frame(egui::Frame::NONE.inner_margin(egui::Margin { left: BAR_MARGIN - 1, right: BAR_MARGIN - 1, top: 2, bottom: 2 }))
-            .show(ui, |ui| {
-                if crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail {
-                    let title = if app.ui.presets {
-                        "Presets"
-                    } else {
-                        match app.ui.right {
-                            RightPanel::Crop => "Crop",
-                            RightPanel::Masking => "Masking",
-                            RightPanel::Remove => "Remove",
-                            RightPanel::RedEye => "Red Eye",
-                            RightPanel::Profiles => "Profiles",
-                            RightPanel::Info => "Info",
-                            RightPanel::Keywords => "Keywords",
-                            RightPanel::Versions => "Versions",
-                            RightPanel::Activity => "History",
-                            _ => "Edit",
-                        }
-                    };
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(crate::i18n::tr(title)).strong());
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if icon_button(ui, "sheetClose", Icon::ChevronDown, BUTTON, false, true, "Hide controls").clicked() {
-                                close_sheet(app);
-                            }
-                        });
-                    });
-                } else {
-                    tools(app, ui);
-                }
-            });
+        if crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail {
+            // A narrow handle replaces the redundant tool title. A tap or vertical pull switches
+            // between half and tall; it never overlaps the editor's scrolling content.
+            let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::click_and_drag());
+            register(ui.ctx(), "mobileSheet:handle", rect);
+            ui.painter().rect_filled(Rect::from_center_size(rect.center(), vec2(42.0, 4.0)), 3.0, t.text_dim);
+            if response.clicked() || (response.drag_stopped() && response.drag_delta().y.abs() > 28.0) {
+                let tall = if response.clicked() { !tall_sheet(ui.ctx()) } else { response.drag_delta().y < 0.0 };
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile-sheet-tall"), tall));
+            }
+        } else {
+            egui::Panel::top("compact_sheet_tools")
+                .exact_size(BUTTON.y + 4.0)
+                .frame(egui::Frame::NONE.inner_margin(egui::Margin { left: BAR_MARGIN - 1, right: BAR_MARGIN - 1, top: 2, bottom: 2 }))
+                .show(ui, |ui| tools(app, ui));
+        }
         if app.ui.presets {
             super::presets::show(app, ui);
         } else {
