@@ -49,6 +49,164 @@ fn widget(h: &Headless, id: &str) -> Option<egui::Rect> {
 }
 
 #[test]
+fn phone_device_photos_browse_previews_without_import_then_switch_to_edits() {
+    use std::sync::{Arc, Mutex};
+
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let requests_seen = requests.clone();
+    let mut first = true;
+    let services = Services {
+        device_gallery: Some(crate::DeviceGallery {
+            request: Box::new(move |offset| {
+                requests_seen.lock().unwrap().push(offset);
+                Ok(())
+            }),
+            take_page: Box::new(move || {
+                if !first {
+                    return None;
+                }
+                first = false;
+                Some(crate::DevicePage::Photos {
+                    offset: 0,
+                    more: false,
+                    photos: vec![crate::DevicePhoto {
+                        id: "42".into(),
+                        name: "From phone".into(),
+                        preview: Some(egui::ColorImage::filled([2, 2], egui::Color32::RED)),
+                    }],
+                })
+            }),
+            open: Box::new(|_| panic!("browsing must not import originals")),
+            take_open: Box::new(|| None),
+        }),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    app.ui.view = ViewMode::PhotoGrid;
+    let catalog_count = app.session.catalog.photos().count();
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    let r = h.request("ui.clickWidget", json!({"id":"icon:sidebar"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    let r = h.request("ui.clickWidget", json!({"id":"source:devicePhotos"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(widget(&h, "galleryTab:Device Photos").is_some());
+    assert!(widget(&h, "devicePhoto:42").is_some());
+    assert_eq!(h.app.session.catalog.photos().count(), catalog_count, "previews are not imported photos");
+    let r = h.request("ui.clickWidget", json!({"id":"galleryTab:My Edits"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(!h.app.ui.device_gallery);
+    assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::MyEdits);
+    assert!(requests.lock().unwrap().is_empty() || requests.lock().unwrap().as_slice() == [0]);
+}
+
+#[test]
+fn phone_device_photo_imports_once_on_open_and_reopens_existing_edit() {
+    use std::sync::{Arc, Mutex};
+
+    let dir = std::env::temp_dir().join(format!("lc-device-open-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("device-42.png");
+    let image = lightcraft_raster::Rgba8 { width: 8, height: 8, data: vec![[90, 30, 10, 255]; 64] };
+    let png = lightcraft_codecs::encode_png(&lightcraft_codecs::EncodeImage::rgba8(&image), &lightcraft_codecs::EncodeMeta::default()).unwrap();
+    std::fs::write(&path, png).unwrap();
+    let ready = Arc::new(Mutex::new(Vec::new()));
+    let opened = ready.clone();
+    let polled = ready.clone();
+    let mut first = true;
+    let services = Services {
+        device_gallery: Some(crate::DeviceGallery {
+            request: Box::new(|_| Ok(())),
+            take_page: Box::new(move || {
+                if !first {
+                    return None;
+                }
+                first = false;
+                Some(crate::DevicePage::Photos {
+                    offset: 0,
+                    more: false,
+                    photos: vec![crate::DevicePhoto { id: "42".into(), name: "Phone photo".into(), preview: None }],
+                })
+            }),
+            open: Box::new(move |id| {
+                assert_eq!(id, "42");
+                opened.lock().unwrap().push(Ok(path.to_string_lossy().to_string()));
+                Ok(())
+            }),
+            take_open: Box::new(move || polled.lock().unwrap().pop()),
+        }),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo().with_fs(), services);
+    app.ui.view = ViewMode::PhotoGrid;
+    app.ui.device_gallery = true;
+    let n = app.session.catalog.len();
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    for attempt in 0..2 {
+        let r = h.request("ui.clickWidget", json!({"id":"devicePhoto:42"}), SETTLE);
+        assert_eq!(r["ok"], true, "{r}");
+        h.step_until(SETTLE, |h| h.app.ui.view == ViewMode::Detail);
+        assert_eq!(h.app.session.catalog.len(), n + 1, "opening {attempt} must not duplicate");
+        assert!(!h.app.ui.device_gallery);
+        if attempt == 0 {
+            h.app.run("develop.set", json!({"control":"light.exposure", "value":0.7})).unwrap();
+            h.app.ui.device_gallery = true;
+            h.app.ui.view = ViewMode::PhotoGrid;
+            h.step();
+        }
+    }
+    assert_eq!(h.app.session.catalog.photo(h.app.session.active().unwrap()).unwrap().develop.light.exposure, 0.7);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn device_gallery_permission_revocation_clears_cached_previews() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    let revoked = Arc::new(AtomicBool::new(false));
+    let poll_revoked = revoked.clone();
+    let mut received = false;
+    let services = Services {
+        device_gallery: Some(crate::DeviceGallery {
+            request: Box::new(|_| Ok(())),
+            take_page: Box::new(move || {
+                if !received {
+                    received = true;
+                    Some(crate::DevicePage::Photos {
+                        offset: 0,
+                        photos: vec![crate::DevicePhoto { id: "7".into(), name: "Granted".into(), preview: None }],
+                        more: false,
+                    })
+                } else if poll_revoked.swap(false, Ordering::Relaxed) {
+                    Some(crate::DevicePage::PermissionNeeded)
+                } else {
+                    None
+                }
+            }),
+            open: Box::new(|_| Ok(())),
+            take_open: Box::new(|| None),
+        }),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    app.ui.view = ViewMode::PhotoGrid;
+    app.ui.device_gallery = true;
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    assert!(widget(&h, "devicePhoto:7").is_some());
+    revoked.store(true, Ordering::Relaxed);
+    h.step();
+    assert!(widget(&h, "devicePhoto:7").is_none(), "revocation removes stale previews");
+}
+
+#[test]
 fn phone_presets_show_photo_variants_without_a_hover_or_setting() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     assert!(!h.app.ui.preset_thumbs, "desktop preference stays off");

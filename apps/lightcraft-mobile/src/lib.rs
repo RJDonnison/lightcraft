@@ -317,6 +317,57 @@ impl eframe::App for App {
 fn services(export_dir: String) -> Services {
     let saves = std::path::PathBuf::from(&export_dir);
     Services {
+        #[cfg(not(target_os = "android"))]
+        device_gallery: None,
+        #[cfg(target_os = "android")]
+        device_gallery: Some(lightcraft_ui_egui::DeviceGallery {
+            request: Box::new(|offset| {
+                let app = ANDROID_APP.get().ok_or("Device gallery is unavailable")?;
+                android_jni::gallery_page(app, offset)
+            }),
+            take_page: Box::new(|| {
+                let rows = android_jni::take_gallery_page(ANDROID_APP.get()?)?;
+                match rows.first().map(String::as_str) {
+                    Some("permission") => Some(lightcraft_ui_egui::DevicePage::PermissionNeeded),
+                    Some("error") => {
+                        Some(lightcraft_ui_egui::DevicePage::Error(rows.get(1).cloned().unwrap_or_else(|| "Cannot read device photos".into())))
+                    }
+                    Some("page") => {
+                        let offset = rows.get(1)?.parse::<usize>().ok()?;
+                        let more = rows.get(2)? == "1";
+                        let mut photos = Vec::new();
+                        let data = rows.get(3..)?;
+                        for row in data.chunks_exact(3).take(48) {
+                            let preview = std::fs::metadata(&row[2])
+                                .ok()
+                                .filter(|m| m.len() <= 2_000_000)
+                                .and_then(|_| std::fs::read(&row[2]).ok())
+                                .and_then(|bytes| lightcraft_codecs::decode_thumbnail(&bytes, 192).ok())
+                                .map(|t| {
+                                    let rgb: Vec<u8> = t.image.data.iter().flat_map(|p| p.iter().copied()).collect();
+                                    egui::ColorImage::from_rgb([t.image.width, t.image.height], &rgb)
+                                });
+                            photos.push(lightcraft_ui_egui::DevicePhoto { id: row[0].clone(), name: row[1].clone(), preview });
+                        }
+                        Some(lightcraft_ui_egui::DevicePage::Photos { offset, photos, more })
+                    }
+                    _ => Some(lightcraft_ui_egui::DevicePage::Error("Invalid device photo response".into())),
+                }
+            }),
+            open: Box::new(|id| {
+                let app = ANDROID_APP.get().ok_or("Device gallery is unavailable")?;
+                let dir = PICKED_DIR.get().ok_or("Photo library is unavailable")?;
+                android_jni::gallery_open(app, id, &dir.join("Device Photos").to_string_lossy())
+            }),
+            take_open: Box::new(|| {
+                let result = android_jni::take_gallery_open(ANDROID_APP.get()?)?;
+                Some(match (result.first().map(String::as_str), result.get(1)) {
+                    (Some("ok"), Some(path)) => Ok(path.clone()),
+                    (_, Some(message)) => Err(message.clone()),
+                    _ => Err("Cannot open device photo".into()),
+                })
+            }),
+        }),
         export_dir: Some(export_dir),
         // a finished export opens the share sheet (AirDrop, Messages, Save to Photos, other apps)
         #[cfg(target_os = "ios")]

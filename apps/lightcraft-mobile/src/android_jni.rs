@@ -72,6 +72,40 @@ pub fn take_picked(app: &AndroidApp) -> Option<Vec<String>> {
     take_strings(app, jni_str!("takePicked"))
 }
 
+/// Request a bounded page of accessible device images. The activity asks for media permission
+/// when needed; on Android 14+ a selected-only grant limits what the query can see.
+pub fn gallery_page(app: &AndroidApp, offset: usize) -> Result<(), String> {
+    let offset = i32::try_from(offset).map_err(|e| e.to_string())?;
+    with_activity(app, |env, activity| {
+        env.call_method(activity, jni_str!("galleryPage"), jni_sig!("(I)V"), &[JValue::Int(offset)])?;
+        Ok(())
+    })
+    .map_err(|e| format!("Device Photos: {e}"))
+}
+
+pub fn take_gallery_page(app: &AndroidApp) -> Option<Vec<String>> {
+    take_strings(app, jni_str!("takeGalleryPage"))
+}
+
+pub fn gallery_open(app: &AndroidApp, id: &str, target: &str) -> Result<(), String> {
+    with_activity(app, |env, activity| {
+        let id = env.new_string(id)?;
+        let target = env.new_string(target)?;
+        env.call_method(
+            activity,
+            jni_str!("galleryOpen"),
+            jni_sig!("(Ljava/lang/String;Ljava/lang/String;)V"),
+            &[JValue::Object(&id), JValue::Object(&target)],
+        )?;
+        Ok(())
+    })
+    .map_err(|e| format!("Opening device photo: {e}"))
+}
+
+pub fn take_gallery_open(app: &AndroidApp) -> Option<Vec<String>> {
+    take_strings(app, jni_str!("takeGalleryOpen"))
+}
+
 /// The activity's `String[] method()`: null as `None`.
 fn take_strings(app: &AndroidApp, method: &jni::strings::JNIStr) -> Option<Vec<String>> {
     let r = with_activity(app, |env, activity| {

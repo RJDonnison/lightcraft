@@ -52,8 +52,14 @@ orientation, iPad Split View and phone browsers:
   On non-touch compact windows the tools remain inside the sheet. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.
-- **My Photos:** a full-width drawer (a column at the left in landscape) with a direct Import
-  Photos button, All Photos, Recently Added, Picks, Recently Deleted and the album/folder tree.
+- **My Photos:** on Android, **Device Photos** browses the accessible system gallery with paged
+  thumbnails; **My Edits** lists only catalog photos with saved adjustments. The tabs also appear
+  above the photo grid. Browsing does not copy originals. Opening a device photo for editing
+  copies it to `<library>/Picked/Device Photos` once and opens it directly; re-opening keeps its
+  existing edits. Full and selected-only gallery grants show only accessible photos. Denied or
+  revoked access clears the device thumbnails; edits already in the catalog remain available.
+  The drawer also keeps a direct Import Photos button, All Photos, Recently Added, Picks,
+  Recently Deleted and the album/folder tree on phones.
   Create opens the existing album/folder menu. Picking a photo source closes the drawer. Removing
   a photo from an album keeps it in All Photos; deleting it moves it to Recently Deleted.
   With photos selected, **Organize** in the bottom bar offers Add to Album, Remove from Album,

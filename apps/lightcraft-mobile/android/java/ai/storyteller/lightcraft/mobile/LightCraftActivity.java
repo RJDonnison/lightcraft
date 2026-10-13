@@ -33,6 +33,24 @@ import java.util.List;
  * into a folder of that name inside it. Android hands over {@code content://} URIs, not paths.
  */
 public class LightCraftActivity extends NativeActivity {
+    private final GalleryBridge gallery = new GalleryBridge(this);
+
+    public void galleryPage(int offset) { gallery.page(offset); }
+    public String[] takeGalleryPage() { return gallery.takePage(); }
+    public void galleryOpen(String id, String target) { gallery.open(id, target); }
+    public String[] takeGalleryOpen() { return gallery.takeOpen(); }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        gallery.resumed();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        gallery.permissionResult(requestCode);
+    }
     private static final int PICK = 0x4c43;
     private static final int DOCS = 0x4c44;
     private static final int TREE = 0x4c45;

@@ -17,6 +17,19 @@ fn open(dir: &std::path::Path, seed: bool) -> Session {
 }
 
 #[test]
+fn my_edits_only_lists_changed_photos() {
+    let dir = temp_dir("my-edits");
+    let mut s = open(&dir, true);
+    let id = s.selection.active.unwrap();
+    s.execute("develop.set", &json!({"control": "light.exposure", "value": 1.25})).unwrap();
+    s.execute("library.source", &json!({"kind": "myEdits"})).unwrap();
+    assert!(s.visible().contains(&id));
+    let visible = s.visible_cloned();
+    assert!(visible.iter().all(|id| s.catalog.photo(*id).is_some_and(|p| p.is_edited())));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn edits_survive_restart_without_close() {
     let dir = temp_dir("crash");
     let mut s = open(&dir, true);

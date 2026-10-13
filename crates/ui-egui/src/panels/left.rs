@@ -702,6 +702,14 @@ fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 ui.label(egui::RichText::new(name).color(t.text_dim).small());
             }
         });
+        let device_selected = app.ui.device_gallery;
+        if app.services.device_gallery.is_some() && row(app, ui, "devicePhotos", Icon::Photos, "Device Photos", None, device_selected, 0.0).clicked()
+        {
+            app.ui.device_gallery = true;
+            app.caches.device_photos = super::device_gallery::State::default();
+            app.ui.left_panel = false;
+            app.ui.view = crate::state::ViewMode::PhotoGrid;
+        }
         // On Android this calls the platform photo picker; the picked files enter the regular
         // import review and catalog rather than appearing only in the device's gallery.
         let import = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(crate::i18n::tr("Import Photos…")));
@@ -716,6 +724,7 @@ fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             let source = app.session.source;
             for (id, icon, label, count, target) in [
                 ("all", Icon::Photos, "All Photos", Some(counts.total), LibrarySource::All),
+                ("myEdits", Icon::Pencil, "My Edits", None, LibrarySource::MyEdits),
                 ("recentlyAdded", Icon::Clock, "Recently Added", None, LibrarySource::RecentlyAdded),
                 ("picks", Icon::FlagPick, "Picks", Some(counts.picks), LibrarySource::Picks),
                 ("recentlyDeleted", Icon::Trash, "Recently Deleted", Some(counts.deleted), LibrarySource::RecentlyDeleted),
@@ -724,6 +733,7 @@ fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     if let Err(e) = app.run("library.source", json!({"kind": id})) {
                         app.toast(ui.ctx(), e);
                     } else {
+                        app.ui.device_gallery = false;
                         app.ui.left_panel = false;
                     }
                 }
@@ -1264,6 +1274,7 @@ fn albums_tree(app: &mut LightcraftApp, ui: &mut egui::Ui, all: &AlbumKids, pare
                 if let Err(e) = app.run("library.source", json!({"kind": "album", "id": a.id.0})) {
                     app.toast(ui.ctx(), e);
                 } else if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+                    app.ui.device_gallery = false;
                     app.ui.left_panel = false;
                 }
             }

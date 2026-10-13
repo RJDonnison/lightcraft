@@ -318,12 +318,13 @@ pub fn specs() -> Vec<CommandSpec> {
             "Show Source",
             [],
             None,
-            "{kind: all|recentlyAdded|album|recentlyDeleted|picks|missing|libraryFolder, id?: albumId, path?: a path from library.folders (for libraryFolder)}",
+            "{kind: all|myEdits|recentlyAdded|album|recentlyDeleted|picks|missing|libraryFolder, id?: albumId, path?: a path from library.folders (for libraryFolder)}",
             always,
             |s, p| {
                 let kind = str_param(p, "kind").unwrap_or("all");
                 s.source = match kind {
                     "all" => LibrarySource::All,
+                    "myEdits" => LibrarySource::MyEdits,
                     "recentlyAdded" => LibrarySource::RecentlyAdded,
                     "recentlyDeleted" => LibrarySource::RecentlyDeleted,
                     "picks" => LibrarySource::Picks,

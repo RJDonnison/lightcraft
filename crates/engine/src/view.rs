@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub enum LibrarySource {
     #[default]
     All,
+    /// Library photos with develop settings changed from their import look.
+    MyEdits,
     /// Imported in the last import session (we treat "recent" as the latest import date).
     RecentlyAdded,
     Album(AlbumId),
@@ -40,6 +42,7 @@ impl LibrarySource {
         let mut f = f.clone();
         match self {
             LibrarySource::All => {}
+            LibrarySource::MyEdits => f.edited = Some(true),
             // everything imported in the 30 days up to the latest import (by import, newest first)
             LibrarySource::RecentlyAdded => {
                 let latest = cat.photos().filter(|p| p.in_library()).map(|p| p.imported.clone()).max().unwrap_or_default();
@@ -60,6 +63,7 @@ impl LibrarySource {
     pub fn label(&self, cat: &Catalog) -> String {
         match self {
             LibrarySource::All => "All Photos".into(),
+            LibrarySource::MyEdits => "My Edits".into(),
             LibrarySource::RecentlyAdded => "Recently Added".into(),
             LibrarySource::Album(a) => cat.album(*a).map(|a| a.name.clone()).unwrap_or_else(|| "Album".into()),
             LibrarySource::RecentlyDeleted => "Recently Deleted".into(),

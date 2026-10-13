@@ -50,7 +50,20 @@ pub struct GridStats {
 
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t0 = web_time::Instant::now();
-    show_inner(app, ui);
+    if super::compact::is_compact(ui.ctx())
+        && crate::widgets::touch_screen(ui.ctx())
+        && app.services.device_gallery.is_some()
+        && (app.ui.device_gallery || app.session.source == lightcraft_engine::LibrarySource::MyEdits)
+    {
+        super::device_gallery::tabs(app, ui);
+        if app.ui.device_gallery {
+            super::device_gallery::show(app, ui);
+        } else {
+            show_inner(app, ui);
+        }
+    } else {
+        show_inner(app, ui);
+    }
     app.caches.grid_stats.frames += 1;
     app.caches.grid_stats.last_show = t0.elapsed();
 }

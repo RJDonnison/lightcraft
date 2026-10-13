@@ -175,9 +175,34 @@ pub type ShareFn = Box<dyn FnMut(&[String])>;
 /// last heard and wakes the UI itself when that changes; it is never polled for changes.
 pub type SystemThemeFn = Box<dyn Fn(&egui::Context) -> Option<egui::Theme>>;
 
+/// One accessible Android gallery item. Its preview is small and host-decoded; the original is
+/// copied into the library only if the user chooses to edit it.
+pub struct DevicePhoto {
+    pub id: String,
+    pub name: String,
+    pub preview: Option<egui::ColorImage>,
+}
+
+pub enum DevicePage {
+    Photos { offset: usize, photos: Vec<DevicePhoto>, more: bool },
+    PermissionNeeded,
+    Error(String),
+}
+
+/// Async platform gallery bridge. None on desktop and on platforms without direct media access.
+pub struct DeviceGallery {
+    pub request: Box<dyn FnMut(usize) -> Result<(), String>>,
+    pub take_page: Box<dyn FnMut() -> Option<DevicePage>>,
+    pub open: Box<dyn FnMut(&str) -> Result<(), String>>,
+    /// Original copied into app storage, or a user-facing error. Never imports during browsing.
+    pub take_open: Box<dyn FnMut() -> Option<Result<String, String>>>,
+}
+
 /// Platform services injected by the host app (desktop or web).
 #[derive(Default)]
 pub struct Services {
+    /// Android MediaStore browser, isolated from the persistent library catalog.
+    pub device_gallery: Option<DeviceGallery>,
     /// Native file dialogs for commands, shown off the UI thread and answered later
     /// (`pick`; #191). With it, the synchronous pickers below serve only the buttons inside
     /// dialogs; without it (the web, tests) they answer the commands too.
@@ -1568,6 +1593,8 @@ mod drop_tests {
 /// Results recomputed only when the catalog (or their inputs) change.
 #[derive(Default)]
 pub struct Caches {
+    /// Visible, transient platform photo listing. Device originals are not catalog entries.
+    pub device_photos: panels::device_gallery::State,
     keyword_tree: Option<(u64, std::sync::Arc<Vec<lightcraft_catalog::KeywordNode>>)>,
     /// The Keywording box's read-only names (with containing keywords, or Will Export), by library
     /// revision, selection and view.
