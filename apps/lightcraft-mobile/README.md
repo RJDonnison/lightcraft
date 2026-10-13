@@ -73,8 +73,10 @@ orientation, iPad Split View and phone browsers:
   zooms on the desktop too.
 - **Sliders by touch:** a drag that starts sideways adjusts the slider by the distance moved;
   one that starts up or down scrolls the panel, even when it begins on a slider's track. A tap
-  doesn't change the value, and double-tap resets. Compact touch sliders have larger thumbs and
-  readouts. Mouse and trackpad work as on the desktop.
+  doesn't change the value. Double-tap the left or right end to change by one step, or the middle
+  to reset. Compact touch sliders have larger thumbs and display-only readouts. Curve channels and
+  points have larger touch targets; a vertical drag starting away from a point scrolls the sheet.
+  Mouse and trackpad retain their desktop behavior, including exact-value entry.
 - **Import from the photo library:** File ▸ Import Photos… opens the system picker (PHPicker
   on iOS, Android's photo picker). The chosen photos are copied into `<library>/Picked`, then
   the usual Import review opens. On iOS each photo is fetched as its raw file when it has one,

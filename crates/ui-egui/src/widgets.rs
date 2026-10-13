@@ -300,18 +300,21 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
     resp.widget_info(|| egui::WidgetInfo::slider(enabled, value, label_text.clone()));
     let label_resp = ui.interact(label_rect, id.with("label"), Sense::click());
     register(ui.ctx(), format!("slider:{}", spec.id), track_rect);
-    // the value: click it to type an exact one (over the label, so it takes the click)
+    // Exact-number entry is a mouse/keyboard affordance; the phone readout is display-only.
     let value_rect = Rect::from_min_max(pos2(label_rect.right() - 64.0, label_rect.top()), label_rect.max);
-    let value_resp = ui.interact(value_rect, id.with("value"), if enabled { Sense::click() } else { Sense::hover() });
+    let value_resp = ui.interact(value_rect, id.with("value"), if enabled && !touch { Sense::click() } else { Sense::hover() });
     register(ui.ctx(), format!("sliderValue:{}", spec.id), value_rect);
     // say that an exact value can be typed here (issue #534: an exact crop angle was hard to find)
-    let value_resp = if enabled { value_resp.on_hover_text(crate::i18n::tr("Click to type a value")) } else { value_resp };
+    let value_resp = if enabled && !touch { value_resp.on_hover_text(crate::i18n::tr("Click to type a value")) } else { value_resp };
     let typing_id = id.with("typing");
     // Keep the short focus-acquisition guard, but let an explicit Return/Escape end the edit.
-    let mut typing: Option<(String, u8, bool)> = ui.data(|m| m.get_temp(typing_id));
+    let mut typing: Option<(String, u8, bool)> = if touch { None } else { ui.data(|m| m.get_temp(typing_id)) };
+    if touch {
+        ui.data_mut(|m| m.remove::<(String, u8, bool)>(typing_id));
+    }
     let value_pressed = value_resp.is_pointer_button_down_on() && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary));
     // Focus on the owned primary press before fast typing; retain the readout's click activation.
-    if enabled && typing.is_none() && (value_resp.clicked() || value_pressed) {
+    if enabled && !touch && typing.is_none() && (value_resp.clicked() || value_pressed) {
         typing = Some((shown_value(spec, value).trim_start_matches('+').to_string(), 0, value_pressed));
     }
     let value_released = ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary));
@@ -336,6 +339,8 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
     if resp.drag_stopped() || !(resp.dragged() || resp.drag_started()) {
         ui.ctx().data_mut(|d| d.remove::<TouchDrag>(touch_id));
     }
+    let track_double = double_clicked(ui, &resp);
+    let label_double = double_clicked(ui, &label_resp);
     if let Some((mut text, frames, pressed)) = typing.take() {
         // Keep the owned opening release focused without restarting its draft or selection.
         if pressed && value_released {
@@ -376,10 +381,22 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
             let delta = ui.input(|i| i.pointer.delta());
             ui.scroll_with_delta_animation(vec2(0.0, delta.y), egui::style::ScrollAnimation::none());
         }
-    } else if double_clicked(ui, &resp) | double_clicked(ui, &label_resp) {
-        out.reset = true;
-        out.value = Some(spec.default);
-        v = spec.default;
+    } else if track_double || label_double {
+        let next = if touch && track_double {
+            resp.interact_pointer_pos().map_or(spec.default, |pos| mobile_double_tap_value(spec, value, pos.x, track_rect))
+        } else {
+            spec.default
+        };
+        out.reset = !touch
+            || label_double
+            || resp.interact_pointer_pos().is_none_or(|pos| {
+                let edge = track_rect.width() * 0.2;
+                pos.x >= track_rect.left() + edge && pos.x <= track_rect.right() - edge
+            });
+        out.value = Some(next);
+        out.drag_started = true;
+        out.drag_stopped = true;
+        v = next;
     } else {
         if resp.drag_started() {
             out.drag_started = true;
@@ -469,7 +486,7 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
     p.text(label_rect.left_center(), Align2::LEFT_CENTER, crate::i18n::tr(label_override.unwrap_or(spec.label)), label_font.clone(), text_c);
     if typing.is_none() {
         p.text(label_rect.right_center(), Align2::RIGHT_CENTER, shown_value(spec, v), label_font, text_c);
-        if enabled && value_resp.hovered() {
+        if enabled && !touch && value_resp.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
         }
     }
@@ -490,6 +507,20 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
     }
     out
+}
+
+/// The outer fifth of a phone track nudges by exactly one configured control step;
+/// the central area retains double-tap reset.
+fn mobile_double_tap_value(spec: &ControlSpec, value: f64, x: f32, track: Rect) -> f64 {
+    let edge = track.width() * 0.2;
+    let step = spec.step.max(1e-9);
+    if x < track.left() + edge {
+        (value - step).clamp(spec.min, spec.max)
+    } else if x > track.right() - edge {
+        (value + step).clamp(spec.min, spec.max)
+    } else {
+        spec.default
+    }
 }
 
 /// Convert vertical wheel movement to bounded slider steps, keeping sub-notch

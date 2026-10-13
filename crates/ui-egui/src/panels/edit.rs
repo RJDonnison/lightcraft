@@ -859,6 +859,7 @@ fn soft_proofing(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
 
 fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &DevelopSettings) {
     let t = Tokens::get(ui.ctx());
+    let touch = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
     // channel selector
     egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 6, bottom: 4 }).show(ui, |ui| {
         ui.horizontal(|ui| {
@@ -869,7 +870,7 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
                 ("green", hex("#33bb55")),
                 ("blue", hex("#3377ee")),
             ] {
-                let (r, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+                let (r, resp) = ui.allocate_exact_size(vec2(if touch { 44.0 } else { 24.0 }, if touch { 44.0 } else { 24.0 }), Sense::click());
                 register(ui.ctx(), format!("curveChannel:{ch}"), r);
                 let sel = app.ui.curve_channel == ch;
                 if ch == "parametric" {
@@ -907,10 +908,11 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
     let w = ui.available_width();
     // between the panel's 24 / 22 pt margins, like the sliders
     let side = (w - 24.0 - 22.0).max(80.0);
+    let side = if touch { side.min((ui.available_height() - 70.0).clamp(180.0, 400.0)) } else { side };
     // the parametric curve has its split handles under the graph
     let handles_h = if ch == "parametric" { SPLIT_HANDLES_H } else { 0.0 };
     let (outer, _) = ui.allocate_exact_size(vec2(w, side + 12.0 + handles_h), Sense::hover());
-    let r = Rect::from_min_size(pos2(outer.left() + 24.0, outer.top() + 6.0), vec2(side, side));
+    let r = Rect::from_min_size(pos2(outer.left() + if touch { (w - side) / 2.0 } else { 24.0 }, outer.top() + 6.0), vec2(side, side));
     let resp = ui.interact(r, egui::Id::new(("curve", &ch)), Sense::click_and_drag());
     register(ui.ctx(), "curve", r);
     resp.context_menu(|ui| curve_reset_menu(app, ui, &ch));
@@ -987,7 +989,7 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
     // the point being dragged (stored as `Option<usize>` so a stale value can be cleared)
     let mut dragging: Option<usize> = ui.data(|dd| dd.get_temp::<Option<usize>>(drag_id)).flatten();
     let nearest = |q: Pos2| pts.iter().enumerate().map(|(i, p)| (i, to_screen(p.x, p.y).distance(q))).min_by(|a, b| a.1.total_cmp(&b.1));
-    let reach = crate::widgets::grab_radius(ui.ctx(), 10.0);
+    let reach = if touch { 22.0 } else { crate::widgets::grab_radius(ui.ctx(), 10.0) };
     let hovered = resp.hover_pos().and_then(nearest).filter(|(_, dist)| *dist < reach).map(|(i, _)| i);
     // the point being dragged as drawn: none once the finger / button is up (no repaint follows)
     let live = dragging.filter(|_| !resp.drag_stopped());
@@ -999,10 +1001,10 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
     for (i, q) in pts.iter().enumerate() {
         let c = to_screen(q.x, q.y);
         if live == Some(i) || (live.is_none() && hovered == Some(i)) {
-            p.circle_filled(c, 5.5, color);
-            p.circle_stroke(c, 5.5, Stroke::new(1.0, t.canvas));
+            p.circle_filled(c, if touch { 8.0 } else { 5.5 }, color);
+            p.circle_stroke(c, if touch { 8.0 } else { 5.5 }, Stroke::new(1.0, t.canvas));
         } else {
-            p.circle_filled(c, 4.0, color);
+            p.circle_filled(c, if touch { 6.0 } else { 4.0 }, color);
         }
     }
     // input / output readout of the point being dragged (0–255 like the histogram)
@@ -1016,6 +1018,22 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
         );
     }
     let mut new_pts = None;
+    let scroll_id = drag_id.with("scroll");
+    let scrolling = ui.data(|dd| dd.get_temp::<bool>(scroll_id)).unwrap_or(false);
+    let vertical_scroll = touch
+        && resp.drag_started()
+        && ui.input(|i| i.pointer.press_origin().zip(resp.interact_pointer_pos())).is_some_and(|(start, now)| {
+            let delta = now - start;
+            delta.y.abs() > delta.x.abs() && nearest(start).is_none_or(|(_, distance)| distance >= reach)
+        });
+    if vertical_scroll {
+        ui.data_mut(|dd| dd.insert_temp(scroll_id, true));
+    }
+    let scrolling = scrolling || vertical_scroll;
+    if scrolling && (resp.drag_started() || resp.dragged()) {
+        let dy = ui.input(|i| i.pointer.delta().y);
+        ui.scroll_with_delta_animation(vec2(0.0, dy), egui::style::ScrollAnimation::none());
+    }
     if crate::widgets::double_clicked(ui, &resp)
         && let Some(q) = resp.interact_pointer_pos()
         && let Some((i, dist)) = nearest(q)
@@ -1027,6 +1045,7 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
         v.remove(i);
         new_pts = Some(v);
     } else if resp.drag_started()
+        && !scrolling
         && let Some(q) = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos())
     {
         // pick the point under the press, not where the pointer is once the drag threshold passed
@@ -1043,6 +1062,7 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
             }
         }
     } else if resp.dragged()
+        && !scrolling
         && let (Some(i), Some(q)) = (dragging, resp.interact_pointer_pos())
     {
         let (mut x, y) = from_screen(q);
@@ -1076,7 +1096,10 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
     }
     if resp.drag_stopped() {
         dragging = None;
-        let _ = app.run("develop.endInteraction", json!({}));
+        if !scrolling {
+            let _ = app.run("develop.endInteraction", json!({}));
+        }
+        ui.data_mut(|dd| dd.remove::<bool>(scroll_id));
     }
     ui.data_mut(|dd| dd.insert_temp(drag_id, dragging));
     curve_footer(app, ui, d);

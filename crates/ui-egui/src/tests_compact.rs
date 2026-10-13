@@ -196,6 +196,17 @@ fn touch_drag(h: &mut Headless, from: egui::Pos2, to: egui::Pos2, steps: usize) 
     h.step();
 }
 
+fn touch_tap(h: &mut Headless, at: egui::Pos2) {
+    let touch = |phase| egui::Event::Touch { device_id: egui::TouchDeviceId(1), id: egui::TouchId(1), phase, pos: at, force: None };
+    let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+    h.input([touch(egui::TouchPhase::Start), egui::Event::PointerMoved(at), button(true)]);
+    h.step();
+    h.input([touch(egui::TouchPhase::End), button(false)]);
+    h.step();
+    h.input([egui::Event::PointerGone]);
+    h.step();
+}
+
 #[test]
 fn touch_swipe_up_on_a_slider_scrolls_the_sheet_instead() {
     let mut h = demo(PHONE, json!({"view": "detail", "right": "edit"}));
@@ -238,6 +249,68 @@ fn touch_tap_on_a_slider_leaves_the_value() {
     let at = egui::pos2(track.left() + 10.0, track.center().y);
     touch_drag(&mut h, at, at, 0);
     assert_eq!(exposure(&h), before);
+}
+
+#[test]
+fn phone_slider_readout_is_not_editable_and_edge_double_taps_step() {
+    let mut h = demo(PHONE, json!({"view": "detail", "right": "edit"}));
+    touch_screen(&mut h);
+    exposure_in_view(&mut h);
+    let value_rect = widget(&h, "sliderValue:light.exposure").expect("Exposure value");
+    touch_tap(&mut h, value_rect.center());
+    assert!(widget(&h, "field:sliderField:light.exposure").is_none(), "touch readout cannot start number entry");
+    let track = exposure_in_view(&mut h);
+    let spec = lightcraft_develop::controls::find("light.exposure").expect("exposure spec");
+    let start = exposure(&h);
+    let left = egui::pos2(track.left() + 4.0, track.center().y);
+    touch_tap(&mut h, left);
+    touch_tap(&mut h, left);
+    assert!((exposure(&h) - (start - spec.step)).abs() < 1e-9, "one step left: start {start}, step {}, got {}", spec.step, exposure(&h));
+    let right = egui::pos2(track.right() - 4.0, track.center().y);
+    touch_tap(&mut h, right);
+    touch_tap(&mut h, right);
+    assert!((exposure(&h) - start).abs() < 1e-9, "one step right");
+    let middle = track.center();
+    touch_tap(&mut h, left);
+    touch_tap(&mut h, left);
+    touch_tap(&mut h, middle);
+    touch_tap(&mut h, middle);
+    assert!((exposure(&h) - spec.default).abs() < 1e-9, "middle resets");
+}
+
+#[test]
+fn phone_curve_scrolls_from_empty_space_but_dragging_a_point_edits_it() {
+    let mut h = demo([390.0, 844.0], json!({"view": "detail", "right": "edit"}));
+    touch_screen(&mut h);
+    click(&mut h, "mobileSheet:handle");
+    click(&mut h, "mobileEdit:curve");
+    click(&mut h, "curveChannel:master");
+    let graph = widget(&h, "curve").expect("curve graph");
+    let sheet = widget(&h, "panel:sheet").expect("expanded sheet");
+    assert!(graph.height() < sheet.height() - 120.0, "graph fits in expanded sheet: {graph:?} {sheet:?}");
+    click(&mut h, "mobileSheet:handle");
+    let graph = widget(&h, "curve").expect("curve graph in short sheet");
+    let id = h.app.session.active().expect("photo");
+    let before = h.app.session.develop_of(id).unwrap_or_default().curve.master.clone();
+    let empty = graph.left_top() + egui::vec2(graph.width() * 0.15, 55.0);
+    touch_drag(&mut h, empty, empty - egui::vec2(2.0, 70.0), 10);
+    assert_eq!(h.app.session.develop_of(id).unwrap_or_default().curve.master, before, "scrolling does not add points");
+    let shifted = widget(&h, "curve").expect("graph after scroll");
+    assert!(shifted.top() < graph.top() - 20.0, "the panel scrolls over the graph: {graph:?} → {shifted:?}");
+    let r = h.request(
+        "engine.execute",
+        json!({"command": "develop.curve", "params": {"channel": "master", "points": [[0.0, 0.0], [0.5, 0.5], [1.0, 1.0]]}}),
+        T,
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    let graph = widget(&h, "curve").expect("graph with point");
+    let middle = graph.center();
+    touch_drag(&mut h, middle, middle - egui::vec2(0.08 * graph.width(), 0.12 * graph.height()), 10);
+    let curve = h.app.session.develop_of(id).unwrap_or_default();
+    let points = &curve.curve.master;
+    assert_eq!(points.len(), 3);
+    assert!(points[1].x < 0.48 && points[1].y > 0.58, "finger moves the point: {points:?}");
 }
 
 #[test]
