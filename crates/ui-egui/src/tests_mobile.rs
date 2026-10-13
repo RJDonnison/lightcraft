@@ -307,3 +307,29 @@ fn phone_editor_bar_opens_crop_masks_curve_and_grading() {
     assert!(widget(&h, "slider:hue").is_some(), "Color exposes its local adjustment sliders");
     assert!(widget(&h, "slider:exposure").is_none(), "Light sliders are outside the chosen category");
 }
+
+#[test]
+fn small_phone_editor_tools_fit_and_more_opens_secondary_panels() {
+    let mut h = touch_app(ViewMode::Detail, [360.0, 740.0]);
+    let click = |h: &mut Headless, id: &str| {
+        let r = h.request("ui.clickWidget", json!({"id": id}), Duration::from_secs(20));
+        assert_eq!(r["ok"], true, "{id}: {r}");
+        h.step();
+        h.step();
+    };
+    for id in ["presets", "edit", "crop", "remove", "masking", "more"] {
+        let rect = widget(&h, &format!("icon:{id}")).expect("primary tool");
+        assert!(rect.left() >= 0.0 && rect.right() <= 360.0, "{id} fits: {rect:?}");
+        assert!(rect.width() >= 44.0, "{id} is a finger-sized target");
+    }
+    click(&mut h, "icon:more");
+    for id in ["redeye", "info", "keywords", "versions", "activity"] {
+        assert!(widget(&h, &format!("icon:{id}")).is_some(), "{id} in More");
+    }
+    click(&mut h, "icon:info");
+    assert_eq!(h.app.ui.right, crate::state::RightPanel::Info);
+    click(&mut h, "icon:crop");
+    assert_eq!(h.app.ui.right, crate::state::RightPanel::Crop);
+    click(&mut h, "icon:crop");
+    assert!(widget(&h, "panel:sheet").is_none(), "the active tool puts the sheet away");
+}

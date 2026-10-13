@@ -266,52 +266,83 @@ fn bottombar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         });
 }
 
-/// The photo editor's primary navigation stays visible while the sheet is open. A horizontally
-/// scrolling row leaves room for full labels instead of making a finger guess at small icons.
+/// Six fixed touch targets fit even a 360-point phone. Secondary tools live in the More grid.
 fn mobile_editor_bar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let has_photo = app.session.active().is_some();
-    egui::ScrollArea::horizontal().id_salt("mobile-editor-tools").auto_shrink([false, false]).show(ui, |ui| {
-        ui.horizontal_centered(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            for (id, label, icon, panel) in [
-                ("edit", "Edit", Icon::Sliders, RightPanel::Edit),
-                ("crop", "Crop", Icon::Crop, RightPanel::Crop),
-                ("masking", "Masking", Icon::Mask, RightPanel::Masking),
-                ("remove", "Remove", Icon::Eraser, RightPanel::Remove),
-                ("presets", "Presets", Icon::Presets, RightPanel::None),
-            ] {
-                let active = if id == "presets" { app.ui.presets } else { !app.ui.presets && app.ui.right == panel };
-                let response = ui
-                    .add_enabled_ui(has_photo, |ui| {
-                        let (rect, response) = ui.allocate_exact_size(vec2(68.0, 44.0), Sense::click());
-                        register(ui.ctx(), format!("icon:{id}"), rect);
-                        if active {
-                            ui.painter().rect_filled(rect.shrink2(vec2(4.0, 1.0)), 8.0, t.cell_selected);
-                        }
-                        let color = if active { t.accent } else { t.text_dim };
-                        paint(ui.painter(), Rect::from_center_size(pos2(rect.center().x, rect.top() + 15.0), vec2(20.0, 20.0)), icon, color);
-                        ui.painter().text(
-                            pos2(rect.center().x, rect.bottom() - 3.0),
-                            egui::Align2::CENTER_BOTTOM,
-                            crate::i18n::tr(label),
-                            t.font(11.0),
-                            color,
-                        );
-                        response.on_hover_text(label).clicked()
-                    })
-                    .inner;
-                if response && !active {
-                    if id == "presets" {
-                        let _ = app.run("panel.presets", json!({}));
-                    } else {
-                        app.ui.presets = false;
-                        let _ = app.run(&format!("panel.{id}"), json!({}));
-                    }
+    let width = ((ui.available_width() - 10.0) / 6.0).clamp(44.0, 68.0);
+    ui.horizontal_centered(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for (id, label, icon, panel) in [
+            ("presets", "Presets", Icon::Presets, RightPanel::None),
+            ("edit", "Edit", Icon::Sliders, RightPanel::Edit),
+            ("crop", "Crop", Icon::Crop, RightPanel::Crop),
+            ("remove", "Remove", Icon::Eraser, RightPanel::Remove),
+            ("masking", "Masking", Icon::Mask, RightPanel::Masking),
+        ] {
+            let active = if id == "presets" { app.ui.presets } else { !app.ui.presets && app.ui.right == panel };
+            let response = ui.add_enabled_ui(has_photo, |ui| mobile_tool(ui, id, label, icon, active, width, &t)).inner;
+            if response.clicked() {
+                if active {
+                    close_sheet(app);
+                } else if id == "presets" {
+                    let _ = app.run("panel.presets", json!({}));
+                } else {
+                    app.ui.presets = false;
+                    let _ = app.run(&format!("panel.{id}"), json!({}));
                 }
+            }
+        }
+        let more = mobile_tool(ui, "more", "More", Icon::More, false, width, &t);
+        egui::Popup::menu(&more).show(|ui| {
+            ui.set_min_width(204.0);
+            for row in [
+                [("redeye", "Red Eye", Icon::Eye), ("info", "Info", Icon::Info), ("keywords", "Keywords", Icon::Tag)],
+                [("versions", "Versions", Icon::Versions), ("activity", "History", Icon::Activity), ("", "", Icon::More)],
+            ] {
+                ui.horizontal(|ui| {
+                    for (id, label, icon) in row {
+                        if id.is_empty() {
+                            ui.add_space(64.0);
+                            continue;
+                        }
+                        let selected = !app.ui.presets
+                            && app.ui.right
+                                == match id {
+                                    "redeye" => RightPanel::RedEye,
+                                    "info" => RightPanel::Info,
+                                    "keywords" => RightPanel::Keywords,
+                                    "versions" => RightPanel::Versions,
+                                    _ => RightPanel::Activity,
+                                };
+                        let response =
+                            ui.add_enabled_ui(has_photo || id == "activity", |ui| mobile_tool(ui, id, label, icon, selected, 64.0, &t)).inner;
+                        if response.clicked() {
+                            app.ui.presets = false;
+                            if selected {
+                                close_sheet(app);
+                            } else if let Err(e) = app.run(&format!("panel.{id}"), json!({})) {
+                                app.toast(ui.ctx(), e);
+                            }
+                            ui.close();
+                        }
+                    }
+                });
             }
         });
     });
+}
+
+fn mobile_tool(ui: &mut egui::Ui, id: &str, label: &str, icon: Icon, active: bool, width: f32, t: &Tokens) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(width, 44.0), Sense::click());
+    register(ui.ctx(), format!("icon:{id}"), rect);
+    if active {
+        ui.painter().rect_filled(rect.shrink2(vec2(2.0, 1.0)), 8.0, t.cell_selected);
+    }
+    let color = if active { t.accent } else { t.text_dim };
+    paint(ui.painter(), Rect::from_center_size(pos2(rect.center().x, rect.top() + 15.0), vec2(20.0, 20.0)), icon, color);
+    ui.painter().text(pos2(rect.center().x, rect.bottom() - 3.0), egui::Align2::CENTER_BOTTOM, crate::i18n::tr(label), t.font(10.0), color);
+    response.on_hover_text(label)
 }
 
 /// Phone-accessible catalog actions for the current selection. Albums organize library photos;
