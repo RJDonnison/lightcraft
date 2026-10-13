@@ -392,3 +392,36 @@ fn small_phone_editor_tools_fit_and_more_opens_secondary_panels() {
     click(&mut h, "icon:crop");
     assert!(widget(&h, "panel:sheet").is_none(), "the active tool puts the sheet away");
 }
+
+#[test]
+fn small_phone_color_mixer_bands_are_finger_sized_and_selectable() {
+    let mut h = touch_app(ViewMode::Detail, [360.0, 740.0]);
+    h.app.ui.right = crate::state::RightPanel::Edit;
+    h.app.ui.toggle_flyout("mixer");
+    h.settle(SETTLE);
+    let click = h.request("ui.clickWidget", json!({"id": "mobileEdit:color"}), SETTLE);
+    assert_eq!(click["ok"], true, "{click}");
+    h.step();
+    let bands = lightcraft_develop::MIXER_BANDS;
+    for band in bands {
+        let rect = widget(&h, &format!("mixerBand:{band}")).expect("mixer color dot");
+        assert!(rect.width() >= 36.0 && rect.height() >= 44.0, "{band} is finger-sized: {rect:?}");
+        assert!(rect.right() <= 360.0, "{band} stays on screen: {rect:?}");
+    }
+    let target = bands[2];
+    let sheet = widget(&h, "panel:sheet").expect("sheet");
+    h.input([egui::Event::PointerMoved(sheet.center())]);
+    h.step();
+    let scroll = h.request("ui.scroll", json!({"dy": -300.0}), SETTLE);
+    assert_eq!(scroll["ok"], true, "{scroll}");
+    h.step();
+    let scroll = h.request("ui.scroll", json!({"dy": -150.0}), SETTLE);
+    assert_eq!(scroll["ok"], true, "{scroll}");
+    h.step();
+    let band_rect = widget(&h, &format!("mixerBand:{target}")).expect("band");
+    assert!(band_rect.bottom() <= sheet.bottom(), "band must be visible for touch: {band_rect:?} in {sheet:?}");
+    let r = h.request("ui.clickWidget", json!({"id": format!("mixerBand:{target}")}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert_eq!(h.app.ui.mixer_mode, target);
+}

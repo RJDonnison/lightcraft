@@ -614,9 +614,10 @@ pub fn flyout_row(ui: &mut Ui, id: &str, title: &str, icon: Icon, open: bool) ->
 pub fn text_button(ui: &mut Ui, id: &str, label: &str, active: bool) -> Response {
     let label = if id.starts_with("labelSet-") { label } else { crate::i18n::tr(label) };
     let t = Tokens::get(ui.ctx());
-    let font = t.semibold(11.5);
+    let touch = crate::panels::compact::is_compact(ui.ctx()) && touch_screen(ui.ctx());
+    let font = t.semibold(if touch { 13.0 } else { 11.5 });
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, t.text);
-    let size = vec2((galley.size().x + 18.0).max(37.0), 24.0);
+    let size = vec2((galley.size().x + if touch { 24.0 } else { 18.0 }).max(if touch { 44.0 } else { 37.0 }), if touch { 44.0 } else { 24.0 });
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, label));
     register(ui.ctx(), format!("button:{id}"), r);

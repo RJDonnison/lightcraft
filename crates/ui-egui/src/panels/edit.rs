@@ -1336,7 +1336,8 @@ fn channel_label(ch: &str) -> &'static str {
 fn tat_button(app: &mut LightcraftApp, ui: &mut egui::Ui, tool: &str, tip: &str) {
     let active = app.ui.tool == tool;
     let id = tool.replace(':', "-");
-    if crate::widgets::icon_button(ui, &id, Icon::Target, vec2(26.0, 26.0), active, true, tip).clicked() {
+    let side = if crate::panels::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) { 44.0 } else { 26.0 };
+    if crate::widgets::icon_button(ui, &id, Icon::Target, vec2(side, side), active, true, tip).clicked() {
         app.ui.tool = if active { String::new() } else { tool.to_string() };
     }
 }
@@ -1345,25 +1346,30 @@ fn tat_button(app: &mut LightcraftApp, ui: &mut egui::Ui, tool: &str, tip: &str)
 
 fn mixer(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &DevelopSettings) {
     let t = Tokens::get(ui.ctx());
+    let touch = crate::panels::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
     let bands = lightcraft_develop::MIXER_BANDS;
     let sel = bands.iter().position(|b| *b == app.ui.mixer_mode).unwrap_or(0);
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 8, bottom: 4 }).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 5.0;
-            for (i, b) in bands.iter().enumerate() {
-                let (r, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
-                register(ui.ctx(), format!("mixerBand:{b}"), r);
-                ui.painter().circle_filled(r.center(), 9.0, hex(BAND_COLORS[i]));
-                if i == sel {
-                    ui.painter().circle_stroke(r.center(), 10.5, Stroke::new(1.5, t.text));
-                    ui.painter().circle_filled(r.center(), 2.0, Color32::WHITE);
+    egui::Frame::NONE.inner_margin(egui::Margin { left: if touch { 8 } else { 24 }, right: if touch { 8 } else { 22 }, top: 8, bottom: 4 }).show(
+        ui,
+        |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = if touch { 2.0 } else { 5.0 };
+                let side = if touch { ((ui.available_width() - 14.0) / 8.0).max(36.0) } else { 22.0 };
+                for (i, b) in bands.iter().enumerate() {
+                    let (r, resp) = ui.allocate_exact_size(vec2(side, if touch { 44.0 } else { 22.0 }), Sense::click());
+                    register(ui.ctx(), format!("mixerBand:{b}"), r);
+                    ui.painter().circle_filled(r.center(), if touch { 12.0 } else { 9.0 }, hex(BAND_COLORS[i]));
+                    if i == sel {
+                        ui.painter().circle_stroke(r.center(), if touch { 16.0 } else { 10.5 }, Stroke::new(1.5, t.text));
+                        ui.painter().circle_filled(r.center(), 2.0, Color32::WHITE);
+                    }
+                    if resp.clicked() {
+                        app.ui.mixer_mode = b.to_string();
+                    }
                 }
-                if resp.clicked() {
-                    app.ui.mixer_mode = b.to_string();
-                }
-            }
-        });
-    });
+            });
+        },
+    );
     // targeted adjustment: pick the attribute, then drag on the photo
     egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 2, bottom: 2 }).show(ui, |ui| {
         // segments across the panel's width (three text buttons beside a target icon overflowed it)

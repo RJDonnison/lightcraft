@@ -81,6 +81,9 @@ orientation, iPad Split View and phone browsers:
   without turning on the desktop thumbnail preference; switching photos updates those previews.
   Touch applies a look directly instead of relying on hover. Profile thumbnails and favorite
   controls have larger touch targets.
+- **Color Mixer:** its eight colour bands have finger-sized selection areas on a phone, with a
+  clear outline around the selected band. The selected band's Hue, Saturation and Luminance
+  sliders remain together; compact touch action buttons have larger hit regions.
 - **Import from the photo library:** File ▸ Import Photos… opens the system picker (PHPicker
   on iOS, Android's photo picker). The chosen photos are copied into `<library>/Picked`, then
   the usual Import review opens. On iOS each photo is fetched as its raw file when it has one,
