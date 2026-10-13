@@ -280,13 +280,15 @@ pub fn slider(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool, label_
 /// lines up with its label column instead.
 pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool, label_override: Option<&str>, pad: (f32, f32)) -> SliderOut {
     let t = Tokens::get(ui.ctx());
+    let touch = ui.input(|i| i.has_touch_screen()) && crate::panels::compact::is_compact(ui.ctx());
     let w = ui.available_width();
     let (row, _) = ui.allocate_exact_size(vec2(w, t.slider_row_h), Sense::hover());
     let (pad_l, pad_r) = pad;
     let label_rect = Rect::from_min_size(pos2(row.left() + pad_l, row.top() + 4.0), vec2(w - pad_l - pad_r, 18.0));
     let track_rect = Rect::from_min_max(pos2(row.left() + pad_l, row.top() + 22.0), pos2(row.right() - pad_r, row.top() + 40.0));
     let id = ui.id().with(spec.id);
-    let resp = ui.interact(track_rect.expand2(vec2(8.0, 2.0)), id, if enabled { Sense::click_and_drag() } else { Sense::hover() });
+    let resp =
+        ui.interact(track_rect.expand2(vec2(8.0, if touch { 5.0 } else { 2.0 })), id, if enabled { Sense::click_and_drag() } else { Sense::hover() });
     // A click selects the slider for arrow/wheel adjustments. Keep scroll-to-adjust
     // opt-in so hovering an unfocused slider still scrolls the containing panel.
     if enabled && (resp.clicked() || resp.drag_started()) {
@@ -463,14 +465,15 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
     let hovered = resp.hovered() || resp.dragged();
     let text_c = if enabled { t.text_label } else { t.text_disabled };
     let p = ui.painter();
-    p.text(label_rect.left_center(), Align2::LEFT_CENTER, crate::i18n::tr(label_override.unwrap_or(spec.label)), t.font(12.5), text_c);
+    let label_font = t.font(if touch { 13.5 } else { 12.5 });
+    p.text(label_rect.left_center(), Align2::LEFT_CENTER, crate::i18n::tr(label_override.unwrap_or(spec.label)), label_font.clone(), text_c);
     if typing.is_none() {
-        p.text(label_rect.right_center(), Align2::RIGHT_CENTER, shown_value(spec, v), t.font(12.5), text_c);
+        p.text(label_rect.right_center(), Align2::RIGHT_CENTER, shown_value(spec, v), label_font, text_c);
         if enabled && value_resp.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
         }
     }
-    let ring = 7.0;
+    let ring = if touch { 9.0 } else { 7.0 };
     let tx = to_x(v);
     paint_track(ui, track_rect, &spec.track, &t, tx, ring);
     let p = ui.painter();

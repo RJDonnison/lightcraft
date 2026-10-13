@@ -32,7 +32,15 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             super::empty_message(ui, r, "No photo selected", "Select a photo to edit");
             return;
         };
-        egui::ScrollArea::vertical().id_salt("right-scroll").auto_shrink([false, false]).show(ui, |ui| {
+        let reset_edit_scroll = app.ui.right == RightPanel::Edit
+            && super::compact::is_compact(ui.ctx())
+            && crate::widgets::touch_screen(ui.ctx())
+            && ui.ctx().data_mut(|d| d.remove_temp::<bool>(egui::Id::new("mobile-edit-scroll-reset"))).is_some();
+        let mut scroll = egui::ScrollArea::vertical().id_salt("right-scroll").auto_shrink([false, false]);
+        if reset_edit_scroll {
+            scroll = scroll.scroll_offset(egui::vec2(0.0, 0.0));
+        }
+        scroll.show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             match app.ui.right {
                 RightPanel::Edit => super::edit::show(app, ui, id),
@@ -138,6 +146,19 @@ fn custom_aspect(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 fn crop(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let d = app.session.develop_of(id).unwrap_or_default();
     header(ui, "Crop");
+    if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+        egui::ScrollArea::horizontal().id_salt("mobile-crop-aspects").show(ui, |ui| {
+            ui.horizontal(|ui| {
+                for (label, aspect) in [("Free", "free"), ("Original", "original"), ("1 × 1", "1x1"), ("4 × 5", "4x5"), ("16 × 9", "16x9")] {
+                    let response = ui.add_sized([72.0, 40.0], egui::Button::new(crate::i18n::tr(label)));
+                    crate::widgets::register(ui.ctx(), format!("mobileCrop:{aspect}"), response.rect);
+                    if response.clicked() {
+                        let _ = app.run("crop.aspect", json!({"aspect": aspect}));
+                    }
+                }
+            });
+        });
+    }
     padded(ui, |ui| {
         let original = app.session.catalog.photo(id).map(|p| {
             let (w, h) = (p.width.max(1) as f64, p.height.max(1) as f64);

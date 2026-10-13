@@ -75,11 +75,7 @@ fn row_sensed(
 ) -> egui::Response {
     let label = if matches!(id, "all" | "recentlyAdded" | "picks" | "missing" | "recentlyDeleted") { crate::i18n::tr(label) } else { label };
     let t = Tokens::get(ui.ctx());
-    let height = if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
-        44.0
-    } else {
-        29.0
-    };
+    let height = if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) { 44.0 } else { 29.0 };
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), height), sense);
     register(ui.ctx(), format!("source:{id}"), r);
     let said = spoken.unwrap_or(label);
@@ -715,37 +711,34 @@ fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         {
             app.toast(ui.ctx(), e);
         }
-        egui::ScrollArea::vertical()
-            .id_salt("mobile-library-scroll")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                let counts = app.caches.counts(&app.session.catalog);
-                let source = app.session.source;
-                for (id, icon, label, count, target) in [
-                    ("all", Icon::Photos, "All Photos", Some(counts.total), LibrarySource::All),
-                    ("recentlyAdded", Icon::Clock, "Recently Added", None, LibrarySource::RecentlyAdded),
-                    ("picks", Icon::FlagPick, "Picks", Some(counts.picks), LibrarySource::Picks),
-                    ("recentlyDeleted", Icon::Trash, "Recently Deleted", Some(counts.deleted), LibrarySource::RecentlyDeleted),
-                ] {
-                    if row(app, ui, id, icon, label, count, source == target, 0.0).clicked() {
-                        if let Err(e) = app.run("library.source", json!({"kind": id})) {
-                            app.toast(ui.ctx(), e);
-                        } else {
-                            app.ui.left_panel = false;
-                        }
+        egui::ScrollArea::vertical().id_salt("mobile-library-scroll").auto_shrink([false, false]).show(ui, |ui| {
+            let counts = app.caches.counts(&app.session.catalog);
+            let source = app.session.source;
+            for (id, icon, label, count, target) in [
+                ("all", Icon::Photos, "All Photos", Some(counts.total), LibrarySource::All),
+                ("recentlyAdded", Icon::Clock, "Recently Added", None, LibrarySource::RecentlyAdded),
+                ("picks", Icon::FlagPick, "Picks", Some(counts.picks), LibrarySource::Picks),
+                ("recentlyDeleted", Icon::Trash, "Recently Deleted", Some(counts.deleted), LibrarySource::RecentlyDeleted),
+            ] {
+                if row(app, ui, id, icon, label, count, source == target, 0.0).clicked() {
+                    if let Err(e) = app.run("library.source", json!({"kind": id})) {
+                        app.toast(ui.ctx(), e);
+                    } else {
+                        app.ui.left_panel = false;
                     }
                 }
-                ui.add_space(12.0);
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(crate::i18n::tr("Albums")).strong());
-                    let new = ui.menu_button(crate::i18n::tr("Create"), |ui| new_album_menu(app, ui));
-                    register(ui.ctx(), "button:libraryCreateAlbum", new.response.rect);
-                });
-                let reveal = app.ui.reveal_album.take();
-                albums_rows(app, ui, reveal);
-                ui.add_space(12.0);
+            }
+            ui.add_space(12.0);
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(crate::i18n::tr("Albums")).strong());
+                let new = ui.menu_button(crate::i18n::tr("Create"), |ui| new_album_menu(app, ui));
+                register(ui.ctx(), "button:libraryCreateAlbum", new.response.rect);
             });
+            let reveal = app.ui.reveal_album.take();
+            albums_rows(app, ui, reveal);
+            ui.add_space(12.0);
+        });
     });
 }
 

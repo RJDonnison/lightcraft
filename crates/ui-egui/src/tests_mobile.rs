@@ -148,9 +148,7 @@ fn the_phone_grid_shows_info_in_the_sheet() {
 fn phone_library_navigates_album_and_trash_without_losing_catalog_photos() {
     let mut h = touch_app(ViewMode::PhotoGrid, [390.0, 844.0]);
     let id = h.app.session.visible()[0].0;
-    let album = h.app.run("album.create", json!({"name": "Trip"})).unwrap()["id"]
-        .as_u64()
-        .unwrap();
+    let album = h.app.run("album.create", json!({"name": "Trip"})).unwrap()["id"].as_u64().unwrap();
     h.step();
 
     let click = |h: &mut Headless, id: &str| {
@@ -173,18 +171,12 @@ fn phone_library_navigates_album_and_trash_without_losing_catalog_photos() {
     );
     click(&mut h, "icon:sidebar");
     click(&mut h, &format!("source:album:{album}"));
-    assert_eq!(
-        h.app.session.source,
-        lightcraft_engine::LibrarySource::Album(lightcraft_catalog::AlbumId(album))
-    );
+    assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::Album(lightcraft_catalog::AlbumId(album)));
     assert!(!h.app.ui.left_panel);
     h.app.run("library.select", json!({"ids": [id]})).unwrap();
     click(&mut h, "icon:organize");
     click(&mut h, "button:organizeRemove");
-    assert!(
-        h.app.session.catalog.photo(lightcraft_catalog::PhotoId(id)).is_some(),
-        "removing membership keeps the catalog photo"
-    );
+    assert!(h.app.session.catalog.photo(lightcraft_catalog::PhotoId(id)).is_some(), "removing membership keeps the catalog photo");
     click(&mut h, "icon:sidebar");
     click(&mut h, "source:all");
     assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::All);
@@ -266,4 +258,52 @@ fn compare_candidates_step_from_the_menu() {
     assert_ne!(before.map(|p| p.1), after.map(|p| p.1), "the candidate moves on");
     h.app.run("compare.previous", json!({})).unwrap();
     assert_eq!(crate::panels::compare::compare_pair(&mut h.app), before, "and back");
+}
+
+/// The editor bar and category strip expose the deep editing tools without scrolling past all
+/// other controls. Switching panels does not change develop values until a control is used.
+#[test]
+fn phone_editor_bar_opens_crop_masks_curve_and_grading() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    let click = |h: &mut Headless, id: &str| {
+        let r = h.request("ui.clickWidget", json!({"id": id}), Duration::from_secs(20));
+        assert_eq!(r["ok"], true, "{id}: {r}");
+        h.step();
+        h.step();
+    };
+
+    assert!(widget(&h, "icon:crop").is_some());
+    if widget(&h, "panel:sheet").is_none() {
+        click(&mut h, "icon:edit");
+    }
+    assert!(widget(&h, "mobileEdit:curve").is_some());
+    assert!(widget(&h, "button:auto").is_some(), "quick edits remain available on a phone");
+    click(&mut h, "mobileEdit:color");
+    assert!(widget(&h, "dropdown:profile").is_some(), "profile selection remains available on a phone");
+    click(&mut h, "mobileEdit:curve");
+    let curve = widget(&h, "curve").expect("curve controls in the sheet");
+    let sheet = widget(&h, "panel:sheet").expect("editor sheet");
+    assert!(curve.top() < sheet.bottom() - 80.0, "curve canvas must be visible above the tool bar");
+    click(&mut h, "mobileEdit:grading");
+    assert!(widget(&h, "icon:grading-3way").is_some(), "color grading controls in the sheet");
+
+    click(&mut h, "icon:crop");
+    assert!(widget(&h, "mobileCrop:1x1").is_some(), "aspect presets in Crop");
+    click(&mut h, "mobileCrop:1x1");
+    let id = h.app.session.active().expect("active photo");
+    assert_eq!(h.app.session.develop_of(id).expect("develop settings").crop.aspect, Some((100, 100)));
+
+    click(&mut h, "icon:masking");
+    assert!(widget(&h, "mobileMask:Color").is_none(), "adjustments appear after selecting a mask");
+    h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
+    h.settle(SETTLE);
+    assert!(widget(&h, "button:mobileMaskCreate").is_some(), "creation collapses above existing masks");
+    assert!(widget(&h, "mobileMask:Color").is_some(), "local adjustments have categories");
+    h.input([egui::Event::PointerMoved(egui::pos2(250.0, 680.0))]);
+    h.step();
+    h.request("ui.scroll", json!({"dy": -450.0}), Duration::from_secs(20));
+    h.step();
+    click(&mut h, "mobileMask:Color");
+    assert!(widget(&h, "slider:hue").is_some(), "Color exposes its local adjustment sliders");
+    assert!(widget(&h, "slider:exposure").is_none(), "Light sliders are outside the chosen category");
 }

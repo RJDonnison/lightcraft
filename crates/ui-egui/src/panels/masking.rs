@@ -86,113 +86,138 @@ fn tile_layout(width: f32, label: impl Fn(f32) -> f32) -> (usize, f32, f32) {
     (2, room(2).max(24.0), 9.5)
 }
 
+fn mask_progress(app: &mut LightcraftApp, ui: &mut egui::Ui, t: Tokens) {
+    let seg = &app.session.segmenter;
+    let status = if seg.analyzing() {
+        Some("Analyzing the photo for AI masks…")
+    } else if seg.busy() {
+        Some("Selecting…")
+    } else if seg.detail_busy() || app.ui.detail_due.is_some() {
+        Some("Refining the mask's detail…")
+    } else {
+        None
+    };
+    if let Some(status) = status {
+        ui.add_space(4.0);
+        ui.add(egui::Label::new(egui::RichText::new(crate::i18n::tr(status)).color(t.text_dim)).wrap());
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+    }
+    let download = seg.download_status();
+    if download.running && app.ui.dialog.is_none() {
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let pct = if download.total > 0 { download.done as f64 / download.total as f64 } else { 0.0 };
+            let r = ui.add(
+                egui::ProgressBar::new(pct as f32).desired_width(ui.available_width() - 70.0).text(format!("SAM 3: {} %", (pct * 100.0).floor())),
+            );
+            register(ui.ctx(), "maskSamProgress", r.rect);
+            if text_button(ui, "maskSamDetails", crate::i18n::tr("Details"), false).clicked() {
+                app.offer_sam_download(None);
+            }
+        });
+    }
+}
+
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let t = Tokens::get(ui.ctx());
     let d = app.session.develop_of(id).unwrap_or_default();
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
     header(ui, "Masking");
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
-        ui.label(egui::RichText::new(crate::i18n::tr("Create New Mask")).color(t.text_dim));
-        ui.add_space(6.0);
-        let tiles: [(&str, &str, Icon); 10] = [
-            ("object", "Object", Icon::Subject),
-            ("prompt", "Describe", Icon::Subject),
-            ("subject", "Subject", Icon::Subject),
-            ("sky", "Sky", Icon::Sky),
-            ("background", "Background", Icon::Subject),
-            ("brush", "Brush", Icon::Brush),
-            ("linear", "Linear", Icon::Linear),
-            ("radial", "Radial", Icon::Radial),
-            ("luminanceRange", "Luminance", Icon::Sliders),
-            ("colorRange", "Color", Icon::Picker),
-        ];
-        // four 52 pt tiles a row when they and their labels fit, else fewer (wider for a long label)
-        let widest = |size: f32| {
-            let font = t.font(size);
-            tiles
-                .iter()
-                .map(|(_, l, _)| ui.painter().layout_no_wrap(crate::i18n::tr(l).to_string(), font.clone(), t.text_dim).size().x)
-                .fold(0.0, f32::max)
-        };
-        let (cols, tile, size) = tile_layout(ui.available_width(), widest);
-        egui::Grid::new("mask-tiles").spacing(vec2(TILE_GAP, TILE_GAP)).show(ui, |ui| {
-            for (i, (kind, label, icon)) in tiles.iter().enumerate() {
-                let (r, resp) = ui.allocate_exact_size(vec2(tile, 52.0), Sense::click());
-                register(ui.ctx(), format!("maskNew:{kind}"), r);
-                ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.hover } else { t.inset });
-                paint(ui.painter(), Rect::from_center_size(r.center() - vec2(0.0, 7.0), vec2(20.0, 20.0)), *icon, t.text_label);
-                // (cut short only in a panel too narrow for the label: the full name on hover)
-                let label = crate::i18n::tr(label);
-                let g = one_line(ui.painter(), label, t.font(size), t.text_dim, tile - 2.0 * TILE_PAD);
-                let elided = g.elided;
-                let at = pos2(r.center().x, r.bottom() - 9.0) - g.size() / 2.0;
-                register(ui.ctx(), format!("maskNewLabel:{kind}"), Rect::from_min_size(at, g.size()));
-                ui.painter().galley(at, g, t.text_dim);
-                let resp = if elided { resp.on_hover_text(label) } else { resp };
-                if resp.clicked() {
-                    match *kind {
-                        "colorRange" => {
-                            // an empty colour range; clicking the photo samples it
-                            let _ = app.run("mask.add", json!({"kind": "colorRange"}));
-                            app.ui.tool = "colorRange".into();
-                            app.ui.pick_adds = false;
-                            app.toast(ui.ctx(), crate::i18n::tr("Click the photo to pick a colour · ⇧-click adds more"));
-                        }
-                        "object" => start_object(app, ui.ctx(), "new"),
-                        "prompt" => start_describe(app, "new"),
-                        "brush" => {
-                            let _ = app.run("tool.brush", json!({"new": true}));
-                        }
-                        "linear" | "radial" => {
-                            app.ui.tool = kind.to_string();
-                            if app.run("mask.add", json!({"kind": kind})).is_ok() {
-                                // drag on the photo to draw it (it starts with a default shape)
-                                app.ui.draw_mask = app.session.active_mask;
-                                app.toast(ui.ctx(), crate::i18n::tr("Drag on the photo to draw the gradient"));
+    let create_key = egui::Id::new(("mobile-mask-create", id));
+    let mut creating = ui.ctx().data(|data| data.get_temp::<bool>(create_key)).unwrap_or(false);
+    if mobile && !d.masks.is_empty() {
+        let button = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(crate::i18n::tr("Create New Mask")));
+        register(ui.ctx(), "button:mobileMaskCreate", button.rect);
+        if button.clicked() {
+            creating = !creating;
+            ui.ctx().data_mut(|data| data.insert_temp(create_key, creating));
+        }
+    }
+    if !mobile || d.masks.is_empty() || creating {
+        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
+            ui.label(egui::RichText::new(crate::i18n::tr("Create New Mask")).color(t.text_dim));
+            ui.add_space(6.0);
+            let tiles: [(&str, &str, Icon); 10] = [
+                ("object", "Object", Icon::Subject),
+                ("prompt", "Describe", Icon::Subject),
+                ("subject", "Subject", Icon::Subject),
+                ("sky", "Sky", Icon::Sky),
+                ("background", "Background", Icon::Subject),
+                ("brush", "Brush", Icon::Brush),
+                ("linear", "Linear", Icon::Linear),
+                ("radial", "Radial", Icon::Radial),
+                ("luminanceRange", "Luminance", Icon::Sliders),
+                ("colorRange", "Color", Icon::Picker),
+            ];
+            // four 52 pt tiles a row when they and their labels fit, else fewer (wider for a long label)
+            let widest = |size: f32| {
+                let font = t.font(size);
+                tiles
+                    .iter()
+                    .map(|(_, l, _)| ui.painter().layout_no_wrap(crate::i18n::tr(l).to_string(), font.clone(), t.text_dim).size().x)
+                    .fold(0.0, f32::max)
+            };
+            let (cols, tile, size) = tile_layout(ui.available_width(), widest);
+            egui::Grid::new("mask-tiles").spacing(vec2(TILE_GAP, TILE_GAP)).show(ui, |ui| {
+                for (i, (kind, label, icon)) in tiles.iter().enumerate() {
+                    let (r, resp) = ui.allocate_exact_size(vec2(tile, 52.0), Sense::click());
+                    register(ui.ctx(), format!("maskNew:{kind}"), r);
+                    ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.hover } else { t.inset });
+                    paint(ui.painter(), Rect::from_center_size(r.center() - vec2(0.0, 7.0), vec2(20.0, 20.0)), *icon, t.text_label);
+                    // (cut short only in a panel too narrow for the label: the full name on hover)
+                    let label = crate::i18n::tr(label);
+                    let g = one_line(ui.painter(), label, t.font(size), t.text_dim, tile - 2.0 * TILE_PAD);
+                    let elided = g.elided;
+                    let at = pos2(r.center().x, r.bottom() - 9.0) - g.size() / 2.0;
+                    register(ui.ctx(), format!("maskNewLabel:{kind}"), Rect::from_min_size(at, g.size()));
+                    ui.painter().galley(at, g, t.text_dim);
+                    let resp = if elided { resp.on_hover_text(label) } else { resp };
+                    if resp.clicked() {
+                        match *kind {
+                            "colorRange" => {
+                                // an empty colour range; clicking the photo samples it
+                                let _ = app.run("mask.add", json!({"kind": "colorRange"}));
+                                app.ui.tool = "colorRange".into();
+                                app.ui.pick_adds = false;
+                                app.toast(ui.ctx(), crate::i18n::tr("Click the photo to pick a colour · ⇧-click adds more"));
+                            }
+                            "object" => start_object(app, ui.ctx(), "new"),
+                            "prompt" => start_describe(app, "new"),
+                            "brush" => {
+                                let _ = app.run("tool.brush", json!({"new": true}));
+                            }
+                            "linear" | "radial" => {
+                                app.ui.tool = kind.to_string();
+                                if app.run("mask.add", json!({"kind": kind})).is_ok() {
+                                    // drag on the photo to draw it (it starts with a default shape)
+                                    app.ui.draw_mask = app.session.active_mask;
+                                    app.toast(ui.ctx(), crate::i18n::tr("Drag on the photo to draw the gradient"));
+                                }
+                            }
+                            k => {
+                                let _ = app.run("mask.add", json!({"kind": k}));
                             }
                         }
-                        k => {
-                            let _ = app.run("mask.add", json!({"kind": k}));
-                        }
+                    }
+                    if i % cols == cols - 1 {
+                        ui.end_row();
                     }
                 }
-                if i % cols == cols - 1 {
-                    ui.end_row();
-                }
+            });
+            describe_field(app, ui, true);
+            if !mobile {
+                mask_progress(app, ui, t);
             }
         });
-        describe_field(app, ui, true);
-        let seg = &app.session.segmenter;
-        let status = if seg.analyzing() {
-            Some("Analyzing the photo for AI masks…")
-        } else if seg.busy() {
-            Some("Selecting…")
-        } else if seg.detail_busy() || app.ui.detail_due.is_some() {
-            Some("Refining the mask's detail…")
-        } else {
-            None
-        };
-        if let Some(status) = status {
-            ui.add_space(4.0);
-            ui.add(egui::Label::new(egui::RichText::new(crate::i18n::tr(status)).color(t.text_dim)).wrap());
-            ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
-        }
-        // the model download, while its dialog is closed
-        let download = seg.download_status();
-        if download.running && app.ui.dialog.is_none() {
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                let pct = if download.total > 0 { download.done as f64 / download.total as f64 } else { 0.0 };
-                let r = ui.add(
-                    egui::ProgressBar::new(pct as f32).desired_width(ui.available_width() - 70.0).text(format!("SAM 3: {} %", (pct * 100.0).floor())),
-                );
-                register(ui.ctx(), "maskSamProgress", r.rect);
-                if text_button(ui, "maskSamDetails", crate::i18n::tr("Details"), false).clicked() {
-                    app.offer_sam_download(None);
-                }
-            });
-        }
-    });
-    divider(ui);
+        divider(ui);
+    }
+    // Analysis and model-download progress must remain visible even when the phone's mask
+    // creation choices are collapsed around an existing mask.
+    if mobile {
+        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 0 }).show(ui, |ui| {
+            mask_progress(app, ui, t);
+        });
+    }
     // mask list
     // (the mask rows run wider than the panel's 24 / 22 pt margins; the header keeps them)
     egui::Frame::NONE.inner_margin(egui::Margin { left: 16, right: 16, top: 8, bottom: 8 }).show(ui, |ui| {
@@ -232,7 +257,8 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
                 }
                 continue;
             }
-            let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
+            let row_height = if mobile { 44.0 } else { 30.0 };
+            let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_height), Sense::click());
             register(ui.ctx(), format!("mask:{}", m.id), r);
             ui.painter().rect_filled(
                 r,
@@ -246,7 +272,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
                 },
             );
             let icon = m.components.first().map(|c| kind_label(&c.shape).1).unwrap_or(Icon::Mask);
-            paint(ui.painter(), Rect::from_min_size(r.min + vec2(8.0, 7.0), vec2(16.0, 16.0)), icon, t.text_label);
+            paint(ui.painter(), Rect::from_min_size(pos2(r.left() + 8.0, r.center().y - 8.0), vec2(16.0, 16.0)), icon, t.text_label);
             // a long name is cut short (with …) before the eye, the full name on hover
             let color = if m.visible { t.text } else { t.text_disabled };
             let g = one_line(ui.painter(), &m.name, t.font(13.0), color, r.width() - 32.0 - 32.0);
@@ -376,7 +402,43 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         brush_settings(app, ui);
     }
     divider(ui);
-    for s in LOCAL {
+    let category = if mobile {
+        let key = egui::Id::new(("mobile-mask-adjustments", id));
+        let mut selected = ui.ctx().data(|data| data.get_temp::<usize>(key)).unwrap_or(0);
+        let mut changed = false;
+        egui::ScrollArea::horizontal().id_salt("mobile-mask-categories").show(ui, |ui| {
+            ui.horizontal(|ui| {
+                for (index, label) in ["Light", "Color", "Effects", "Detail"].iter().enumerate() {
+                    let response = ui.selectable_label(index == selected, crate::i18n::tr(label));
+                    register(ui.ctx(), format!("mobileMask:{label}"), response.rect);
+                    if response.clicked() {
+                        selected = index;
+                        changed = true;
+                        ui.ctx().data_mut(|data| data.insert_temp(key, selected));
+                    }
+                }
+            });
+        });
+        if changed {
+            ui.scroll_to_cursor(Some(egui::Align::TOP));
+        }
+        Some(selected)
+    } else {
+        None
+    };
+    for (i, s) in LOCAL.iter().enumerate() {
+        let group = if (2..8).contains(&i) {
+            0
+        } else if i < 2 || (11..13).contains(&i) {
+            1
+        } else if i < 11 {
+            2
+        } else {
+            3
+        };
+        if category.is_some_and(|selected| selected != group) {
+            continue;
+        }
         let v = local_get(&m.adjust, s.id);
         let out = slider(ui, s, v, true, None);
         apply_slider_out(app, s, out, |app, v| app.run("mask.adjust", json!({"values": {s.id: v}})));
@@ -392,8 +454,10 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         decimals: 0,
         track: Track::Plain,
     };
-    let out = slider(ui, &amt, m.adjust.amount, true, None);
-    apply_slider_out(app, &amt, out, |app, v| app.run("mask.adjust", json!({"values": {"amount": v}})));
+    if category.is_none_or(|selected| selected == 0) {
+        let out = slider(ui, &amt, m.adjust.amount, true, None);
+        apply_slider_out(app, &amt, out, |app, v| app.run("mask.adjust", json!({"values": {"amount": v}})));
+    }
     let refine = ControlSpec {
         id: "refine",
         label: "Refine Edges",
@@ -405,8 +469,10 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         decimals: 0,
         track: Track::Plain,
     };
-    let out = slider(ui, &refine, m.refine, true, None);
-    apply_slider_out(app, &refine, out, |app, v| app.run("mask.refine", json!({"value": v})));
+    if category.is_none_or(|selected| selected == 3) {
+        let out = slider(ui, &refine, m.refine, true, None);
+        apply_slider_out(app, &refine, out, |app, v| app.run("mask.refine", json!({"value": v})));
+    }
     ui.add_space(30.0);
     let _ = Stroke::NONE;
 }

@@ -74,6 +74,7 @@ fn rel_to_k(r: f64) -> f64 {
 
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let t = Tokens::get(ui.ctx());
+    let focus = if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) { Some(mobile_edit_navigation(ui)) } else { None };
     let d = app.session.develop_of(id).unwrap_or_default();
     // a raw shown from its embedded JPEG (preview only) gets the rendered-file white balance scale
     let raw = app.session.catalog.photo(id).is_some_and(|p| p.develops_raw() && !p.relative_wb());
@@ -94,185 +95,225 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     }
     let preview_only = app.session.catalog.photo(id).and_then(|p| p.preview_only.clone());
 
-    if app.ui.histogram {
+    if app.ui.histogram && focus.is_none() {
         histogram(app, ui, id);
     }
-    if app.ui.soft_proof {
+    if app.ui.soft_proof && focus.is_none() {
         soft_proofing(app, ui, id);
     }
     // header: Edit + Auto / B&W / HDR
     let mut reset_clicked = false;
-    let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
-    ui.painter().text(pos2(hr.left() + 24.0, hr.bottom() - 10.0), Align2::LEFT_CENTER, crate::i18n::tr("Edit"), t.semibold(15.0), t.text);
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 8, bottom: 14 }).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            if text_button(ui, "auto", crate::i18n::tr("Auto"), false).clicked() {
-                let _ = app.run("develop.auto", json!({}));
-                app.toast(ui.ctx(), crate::i18n::tr("Auto settings applied"));
-            }
-            let bw = crate::is_bw(&d);
-            if text_button(ui, "bw", crate::i18n::tr("B&W"), bw).clicked() {
-                let _ = app.run("develop.treatment", json!({}));
-            }
-            // HDR editing, next to B&W as Lightroom has it
-            if text_button(ui, "hdr", crate::i18n::tr("HDR"), d.hdr.enabled)
-                .on_hover_text(crate::i18n::tr("Edit in HDR: highlights above SDR white, for HDR exports and displays"))
-                .clicked()
-            {
-                let _ = app.run("develop.hdr", json!({"enabled": !d.hdr.enabled}));
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if text_button(ui, "reset", crate::i18n::tr("Reset"), false).on_hover_text(crate::i18n::tr("Reset all edits (Cmd+Shift+R)")).clicked()
-                {
-                    reset_clicked = true;
-                }
-            });
-        });
-    });
-    if let Some(why) = &preview_only {
-        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 12 }).show(ui, |ui| {
-            crate::widgets::preview_only_notice(ui, "edit", why);
-        });
-    }
-    let n = app.session.selection.ids.len();
-    if n > 1 && matches!(app.ui.view, crate::state::ViewMode::PhotoGrid | crate::state::ViewMode::SquareGrid) {
-        quick_develop(app, ui, n);
-    }
-    if app.session.auto_sync && n > 1 {
-        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
+    if focus.is_none() {
+        let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
+        ui.painter().text(pos2(hr.left() + 24.0, hr.bottom() - 10.0), Align2::LEFT_CENTER, crate::i18n::tr("Edit"), t.semibold(15.0), t.text);
+        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 8, bottom: 14 }).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(crate::i18n::tr_format!("Auto Sync: edits apply to {n} photos", n = n)).color(t.accent).size(12.0));
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if text_button(ui, "auto", crate::i18n::tr("Auto"), false).clicked() {
+                    let _ = app.run("develop.auto", json!({}));
+                    app.toast(ui.ctx(), crate::i18n::tr("Auto settings applied"));
+                }
+                let bw = crate::is_bw(&d);
+                if text_button(ui, "bw", crate::i18n::tr("B&W"), bw).clicked() {
+                    let _ = app.run("develop.treatment", json!({}));
+                }
+                // HDR editing, next to B&W as Lightroom has it
+                if text_button(ui, "hdr", crate::i18n::tr("HDR"), d.hdr.enabled)
+                    .on_hover_text(crate::i18n::tr("Edit in HDR: highlights above SDR white, for HDR exports and displays"))
+                    .clicked()
+                {
+                    let _ = app.run("develop.hdr", json!({"enabled": !d.hdr.enabled}));
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if text_button(ui, "autoSyncOff", crate::i18n::tr("Turn Off"), false).clicked() {
-                        let _ = app.run("develop.autoSync", json!({"on": false}));
+                    if text_button(ui, "reset", crate::i18n::tr("Reset"), false)
+                        .on_hover_text(crate::i18n::tr("Reset all edits (Cmd+Shift+R)"))
+                        .clicked()
+                    {
+                        reset_clicked = true;
                     }
                 });
             });
         });
+        if let Some(why) = &preview_only {
+            egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 12 }).show(ui, |ui| {
+                crate::widgets::preview_only_notice(ui, "edit", why);
+            });
+        }
+        let n = app.session.selection.ids.len();
+        if n > 1 && matches!(app.ui.view, crate::state::ViewMode::PhotoGrid | crate::state::ViewMode::SquareGrid) {
+            quick_develop(app, ui, n);
+        }
+        if app.session.auto_sync && n > 1 {
+            egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(crate::i18n::tr_format!("Auto Sync: edits apply to {n} photos", n = n)).color(t.accent).size(12.0));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if text_button(ui, "autoSyncOff", crate::i18n::tr("Turn Off"), false).clicked() {
+                            let _ = app.run("develop.autoSync", json!({"on": false}));
+                        }
+                    });
+                });
+            });
+        }
+        divider(ui);
     }
-    divider(ui);
-    // profile row
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 14, bottom: 14 }).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(crate::i18n::tr("Profile")).font(t.font(13.0)).color(t.text_dim));
-            let name = app.session.profile_info(&d.profile.id).map(|(name, _)| name).unwrap_or("Color");
-            let r = crate::widgets::dropdown(ui, "profile", crate::i18n::profile_label(&d.profile.id, name), t.font(15.0), t.text_label);
-            egui::Popup::menu(&r).show(|ui| profile_menu(app, ui, &d));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if crate::widgets::icon_button(ui, "profileBrowser", Icon::ProfileGrid, vec2(28.0, 28.0), false, true, "Browse Profiles").clicked() {
-                    let _ = app.run("panel.profiles", json!({}));
-                }
+    if focus.as_deref() == Some("light")
+        && let Some(why) = &preview_only
+    {
+        crate::widgets::preview_only_notice(ui, "edit", why);
+    }
+    if focus.is_none() || focus.as_deref() == Some("color") {
+        // profile row
+        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 14, bottom: 14 }).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(crate::i18n::tr("Profile")).font(t.font(13.0)).color(t.text_dim));
+                let name = app.session.profile_info(&d.profile.id).map(|(name, _)| name).unwrap_or("Color");
+                let r = crate::widgets::dropdown(ui, "profile", crate::i18n::profile_label(&d.profile.id, name), t.font(15.0), t.text_label);
+                egui::Popup::menu(&r).show(|ui| profile_menu(app, ui, &d));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if crate::widgets::icon_button(ui, "profileBrowser", Icon::ProfileGrid, vec2(28.0, 28.0), false, true, "Browse Profiles")
+                        .clicked()
+                    {
+                        let _ = app.run("panel.profiles", json!({}));
+                    }
+                });
             });
         });
-    });
-    if d.profile.id != "lc.color" {
-        control(app, ui, &d, "profile.amount", true);
-        ui.add_space(6.0);
-    }
-    // a raw carrying its own local tone mapping (Apple ProRAW's gain table map): off renders it as
-    // Lightroom Classic does, on as the camera does
-    if app.session.source_info(id).local_tone.is_some() {
-        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
-            let mut on = d.profile.camera_local_tone;
-            let r = ui.checkbox(&mut on, crate::i18n::tr("Camera local tone mapping"));
-            crate::widgets::register(ui.ctx(), "check:profile.cameraLocalTone", r.rect);
-            if r.on_hover_text(crate::i18n::tr("Apply the local tone mapping stored in the raw (Apple ProRAW), as the camera renders it")).changed() {
-                let _ = app.run("develop.merge", json!({"settings": {"profile": {"camera_local_tone": on}}, "label": "Camera Local Tone Mapping"}));
-            }
-        });
-    }
-    divider(ui);
-
-    section(app, ui, &d, "light", "Light", |app, ui, d| {
-        hdr_row(app, ui, d);
-        for c in ["light.exposure", "light.contrast", "light.highlights", "light.shadows", "light.whites", "light.blacks"] {
-            control(app, ui, d, c, true);
+        if d.profile.id != "lc.color" {
+            control(app, ui, &d, "profile.amount", true);
+            ui.add_space(6.0);
         }
-        ui.add_space(6.0);
-        if d.hdr.enabled {
-            let open = app.ui.flyout_open("sdrRendition");
-            if flyout_row(ui, "sdrRendition", "SDR Rendition", Icon::Sliders, open).clicked() {
-                app.ui.toggle_flyout("sdrRendition");
-            }
-            if open {
-                for c in ["hdr.sdrBrightness", "hdr.sdrContrast", "hdr.sdrHighlights", "hdr.sdrShadows", "hdr.sdrWhites", "hdr.sdrClarity"] {
-                    control(app, ui, d, c, true);
+        // a raw carrying its own local tone mapping (Apple ProRAW's gain table map): off renders it as
+        // Lightroom Classic does, on as the camera does
+        if app.session.source_info(id).local_tone.is_some() {
+            egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
+                let mut on = d.profile.camera_local_tone;
+                let r = ui.checkbox(&mut on, crate::i18n::tr("Camera local tone mapping"));
+                crate::widgets::register(ui.ctx(), "check:profile.cameraLocalTone", r.rect);
+                if r.on_hover_text(crate::i18n::tr("Apply the local tone mapping stored in the raw (Apple ProRAW), as the camera renders it"))
+                    .changed()
+                {
+                    let _ =
+                        app.run("develop.merge", json!({"settings": {"profile": {"camera_local_tone": on}}, "label": "Camera Local Tone Mapping"}));
                 }
-                ui.add_space(6.0);
+            });
+        }
+        divider(ui);
+    }
+    section(app, ui, &d, "light", "Light", |app, ui, d| {
+        if focus.as_deref() != Some("curve") {
+            hdr_row(app, ui, d);
+            for c in ["light.exposure", "light.contrast", "light.highlights", "light.shadows", "light.whites", "light.blacks"] {
+                control(app, ui, d, c, true);
+            }
+            ui.add_space(6.0);
+            if d.hdr.enabled {
+                let open = app.ui.flyout_open("sdrRendition");
+                if flyout_row(ui, "sdrRendition", "SDR Rendition", Icon::Sliders, open).clicked() {
+                    app.ui.toggle_flyout("sdrRendition");
+                }
+                if open {
+                    for c in ["hdr.sdrBrightness", "hdr.sdrContrast", "hdr.sdrHighlights", "hdr.sdrShadows", "hdr.sdrWhites", "hdr.sdrClarity"] {
+                        control(app, ui, d, c, true);
+                    }
+                    ui.add_space(6.0);
+                }
             }
         }
-        let open = app.ui.flyout_open("curve");
-        if flyout_row(ui, "curve", crate::i18n::tr("Curve"), Icon::Curve, open).clicked() {
+        let focused = focus.as_deref() == Some("curve");
+        let open = focused || (focus.is_none() && app.ui.flyout_open("curve"));
+        if !focused && flyout_row(ui, "curve", crate::i18n::tr("Curve"), Icon::Curve, open).clicked() {
             app.ui.toggle_flyout("curve");
         }
         if open {
             curve_editor(app, ui, id, d);
         }
-        ui.add_space(8.0);
-    });
-    section(app, ui, &d, "color", "Color", |app, ui, d| {
-        // White balance row
-        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 2, bottom: 2 }).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(crate::i18n::tr("White Balance")).font(t.font(13.0)).color(t.text_dim));
-                let r = crate::widgets::dropdown(ui, "wbMode", crate::i18n::tr(d.wb.mode.label()), t.font(14.0), t.text_label);
-                egui::Popup::menu(&r).show(|ui| {
-                    for m in WbMode::ALL {
-                        if m == WbMode::Custom {
-                            continue;
-                        }
-                        if ui.selectable_label(d.wb.mode == m, m.label()).clicked() {
-                            let mode = serde_json::to_value(m).unwrap_or_default();
-                            let _ = app.run("develop.wb", json!({"mode": mode}));
-                        }
+        if focus.as_deref() == Some("light") {
+            egui::ScrollArea::horizontal().id_salt("mobile-edit-actions").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if text_button(ui, "auto", crate::i18n::tr("Auto"), false).clicked() {
+                        let _ = app.run("develop.auto", json!({}));
+                        app.toast(ui.ctx(), crate::i18n::tr("Auto settings applied"));
                     }
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let active = app.ui.tool == "wbPicker";
-                    if crate::widgets::icon_button(ui, "wbPicker", Icon::Picker, vec2(28.0, 28.0), active, true, "White Balance Selector (W)")
-                        .clicked()
-                    {
-                        if active {
-                            app.ui.tool.clear();
-                        } else if let Err(e) = app.run("tool.wbPicker", json!({})) {
-                            // the same as W: from Compare, Survey or the grid it opens the photo in Detail
-                            app.toast(ui.ctx(), e);
-                        }
+                    if text_button(ui, "bw", crate::i18n::tr("B&W"), crate::is_bw(d)).clicked() {
+                        let _ = app.run("develop.treatment", json!({}));
+                    }
+                    if text_button(ui, "hdr", crate::i18n::tr("HDR"), d.hdr.enabled).clicked() {
+                        let _ = app.run("develop.hdr", json!({"enabled": !d.hdr.enabled}));
+                    }
+                    if text_button(ui, "reset", crate::i18n::tr("Reset"), false).clicked() {
+                        reset_clicked = true;
                     }
                 });
             });
-        });
-        if raw {
-            control(app, ui, d, "wb.temp", true);
-            control(app, ui, d, "wb.tint", true);
-        } else {
-            let out = slider(ui, &REL_TEMP, k_to_rel(d.wb.temp), true, None);
-            apply_slider_out(app, &REL_TEMP, out, |app, v| app.run("develop.set", json!({"control": "wb.temp", "value": rel_to_k(v)})));
-            let out = slider(ui, &REL_TINT, d.wb.tint.clamp(-100.0, 100.0), true, None);
-            apply_slider_out(app, &REL_TINT, out, |app, v| app.run("develop.set", json!({"control": "wb.tint", "value": v})));
         }
-        control(app, ui, d, "color.vibrance", true);
-        control(app, ui, d, "color.saturation", true);
-        ui.add_space(6.0);
-        let open = app.ui.flyout_open("mixer");
-        if flyout_row(ui, "mixer", if crate::is_bw(d) { "B&W Mixer" } else { "Color Mixer" }, Icon::Radial, open).clicked() {
-            app.ui.toggle_flyout("mixer");
-        }
-        if open {
-            mixer(app, ui, d);
-        }
-        if !crate::is_bw(d) {
-            let open = app.ui.flyout_open("pointColor");
-            if flyout_row(ui, "pointColor", crate::i18n::tr("Point Color"), Icon::Picker, open).clicked() {
-                app.ui.toggle_flyout("pointColor");
+        ui.add_space(8.0);
+    });
+    section(app, ui, &d, "color", "Color", |app, ui, d| {
+        if focus.as_deref() != Some("grading") {
+            // White balance row
+            egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 2, bottom: 2 }).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(crate::i18n::tr("White Balance")).font(t.font(13.0)).color(t.text_dim));
+                    let r = crate::widgets::dropdown(ui, "wbMode", crate::i18n::tr(d.wb.mode.label()), t.font(14.0), t.text_label);
+                    egui::Popup::menu(&r).show(|ui| {
+                        for m in WbMode::ALL {
+                            if m == WbMode::Custom {
+                                continue;
+                            }
+                            if ui.selectable_label(d.wb.mode == m, m.label()).clicked() {
+                                let mode = serde_json::to_value(m).unwrap_or_default();
+                                let _ = app.run("develop.wb", json!({"mode": mode}));
+                            }
+                        }
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let active = app.ui.tool == "wbPicker";
+                        if crate::widgets::icon_button(ui, "wbPicker", Icon::Picker, vec2(28.0, 28.0), active, true, "White Balance Selector (W)")
+                            .clicked()
+                        {
+                            if active {
+                                app.ui.tool.clear();
+                            } else if let Err(e) = app.run("tool.wbPicker", json!({})) {
+                                // the same as W: from Compare, Survey or the grid it opens the photo in Detail
+                                app.toast(ui.ctx(), e);
+                            }
+                        }
+                    });
+                });
+            });
+            if raw {
+                control(app, ui, d, "wb.temp", true);
+                control(app, ui, d, "wb.tint", true);
+            } else {
+                let out = slider(ui, &REL_TEMP, k_to_rel(d.wb.temp), true, None);
+                apply_slider_out(app, &REL_TEMP, out, |app, v| app.run("develop.set", json!({"control": "wb.temp", "value": rel_to_k(v)})));
+                let out = slider(ui, &REL_TINT, d.wb.tint.clamp(-100.0, 100.0), true, None);
+                apply_slider_out(app, &REL_TINT, out, |app, v| app.run("develop.set", json!({"control": "wb.tint", "value": v})));
+            }
+            control(app, ui, d, "color.vibrance", true);
+            control(app, ui, d, "color.saturation", true);
+            ui.add_space(6.0);
+            let open = app.ui.flyout_open("mixer");
+            if flyout_row(ui, "mixer", if crate::is_bw(d) { "B&W Mixer" } else { "Color Mixer" }, Icon::Radial, open).clicked() {
+                app.ui.toggle_flyout("mixer");
             }
             if open {
-                point_color(app, ui, d);
+                mixer(app, ui, d);
+            }
+            if !crate::is_bw(d) {
+                let open = app.ui.flyout_open("pointColor");
+                if flyout_row(ui, "pointColor", crate::i18n::tr("Point Color"), Icon::Picker, open).clicked() {
+                    app.ui.toggle_flyout("pointColor");
+                }
+                if open {
+                    point_color(app, ui, d);
+                }
             }
         }
-        let open = app.ui.flyout_open("grading");
-        if flyout_row(ui, "grading", crate::i18n::tr("Color Grading"), Icon::Presets, open).clicked() {
+        let focused = focus.as_deref() == Some("grading");
+        let open = focused || (focus.is_none() && app.ui.flyout_open("grading"));
+        if !focused && flyout_row(ui, "grading", crate::i18n::tr("Color Grading"), Icon::Presets, open).clicked() {
             app.ui.toggle_flyout("grading");
         }
         if open {
@@ -401,6 +442,40 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     }
 }
 
+/// A single category fills the phone's editing sheet. Curve and Grading focus the existing
+/// flyouts rather than introducing another set of adjustment controls.
+fn mobile_edit_navigation(ui: &mut egui::Ui) -> String {
+    let key = egui::Id::new("mobile-edit-category");
+    let mut focus = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| "light".into());
+    let mut changed = false;
+    egui::ScrollArea::horizontal().id_salt("mobile-edit-categories").show(ui, |ui| {
+        ui.horizontal(|ui| {
+            for (id, label) in [
+                ("light", "Light"),
+                ("curve", "Curve"),
+                ("color", "Color"),
+                ("grading", "Color Grading"),
+                ("effects", "Effects"),
+                ("detail", "Detail"),
+                ("optics", "Optics"),
+                ("calibration", "Calibration"),
+            ] {
+                let r = ui.selectable_label(focus == id, crate::i18n::tr(label));
+                register(ui.ctx(), format!("mobileEdit:{id}"), r.rect);
+                if r.clicked() {
+                    focus = id.into();
+                    ui.ctx().data_mut(|d| d.insert_temp(key, focus.clone()));
+                    changed = true;
+                }
+            }
+        });
+    });
+    if changed {
+        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile-edit-scroll-reset"), true));
+    }
+    focus
+}
+
 /// The profile dropdown: Favorites, Recent, one submenu per group, then favourite toggle and
 /// Browse….
 fn profile_menu(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &DevelopSettings) {
@@ -506,6 +581,25 @@ fn section(
     title: &str,
     body: impl FnOnce(&mut LightcraftApp, &mut egui::Ui, &DevelopSettings),
 ) {
+    if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+        let focus = ui.ctx().data(|d| d.get_temp::<String>(egui::Id::new("mobile-edit-category"))).unwrap_or_else(|| "light".into());
+        let selected = focus == id || (focus == "curve" && id == "light") || (focus == "grading" && id == "color");
+        if !selected {
+            return;
+        }
+        sub_title(
+            ui,
+            if focus == "curve" {
+                "Curve"
+            } else if focus == "grading" {
+                "Color Grading"
+            } else {
+                title
+            },
+        );
+        body(app, ui, d);
+        return;
+    }
     let open = app.ui.section_open(id);
     let (resp, toggled) = section_header(ui, id, title, open, Some(d.section_enabled(id)));
     if let Some(on) = toggled {

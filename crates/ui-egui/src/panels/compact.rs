@@ -122,17 +122,21 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 
 fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
+    let editor = crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail;
     egui::Panel::top("top_bar")
         .exact_size(t.top_bar_h + 4.0)
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin { left: BAR_MARGIN, right: BAR_MARGIN, top: 0, bottom: 0 }))
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                if icon_button(ui, "sidebar", Icon::Sidebar, BUTTON, app.ui.left_panel, true, "Show/hide My Photos panel").clicked() {
+                if !editor && icon_button(ui, "sidebar", Icon::Sidebar, BUTTON, app.ui.left_panel, true, "Show/hide My Photos panel").clicked() {
                     let _ = app.run("view.leftPanel", json!({}));
                 }
                 if icon_button(ui, "back", Icon::Back, BUTTON, false, true, "Back").clicked() {
                     let _ = app.run("view.back", json!({}));
+                }
+                if editor {
+                    ui.label(egui::RichText::new(crate::i18n::tr("Edit Photo")).font(t.semibold(15.0)).color(t.text));
                 }
                 if !app.native_menu {
                     ui.add_space(4.0);
@@ -146,9 +150,11 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 if icon_button(&mut right, "share", Icon::Share, BUTTON, false, true, "Export").clicked() {
                     let _ = app.run("dialog.export", json!({}));
                 }
-                let filtering = app.session.filter != Default::default() || app.ui.filter_bar;
-                if icon_button(&mut right, "filter", Icon::Filter, BUTTON, filtering, true, "Filter bar").clicked() {
-                    let _ = app.run("view.filterBar", json!({}));
+                if !editor {
+                    let filtering = app.session.filter != Default::default() || app.ui.filter_bar;
+                    if icon_button(&mut right, "filter", Icon::Filter, BUTTON, filtering, true, "Filter bar").clicked() {
+                        let _ = app.run("view.filterBar", json!({}));
+                    }
                 }
                 // a failing save keeps its warning visible (the desktop's cloud icon)
                 if let Some((n, e)) = app.session.unsaved() {
@@ -157,10 +163,12 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     register(right.ctx(), "indicator:unsaved", r);
                     resp.on_hover_text(format!("{n} unsaved: {e}"));
                 }
-                right.add_space(4.0);
-                let field = right.available_rect_before_wrap();
-                if field.width() >= 80.0 {
-                    search(app, &mut right, Rect::from_center_size(field.center(), vec2(field.width(), 32.0)));
+                if !editor {
+                    right.add_space(4.0);
+                    let field = right.available_rect_before_wrap();
+                    if field.width() >= 80.0 {
+                        search(app, &mut right, Rect::from_center_size(field.center(), vec2(field.width(), 32.0)));
+                    }
                 }
             });
         });
@@ -208,6 +216,10 @@ fn bottombar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         .exact_size(t.bottom_bar_h + 4.0)
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin { left: BAR_MARGIN, right: BAR_MARGIN, top: 0, bottom: 0 }))
         .show(ui, |ui| {
+            if crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail {
+                mobile_editor_bar(app, ui);
+                return;
+            }
             let full = ui.max_rect();
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -252,6 +264,54 @@ fn bottombar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 app.ui.filmstrip = !app.ui.filmstrip;
             }
         });
+}
+
+/// The photo editor's primary navigation stays visible while the sheet is open. A horizontally
+/// scrolling row leaves room for full labels instead of making a finger guess at small icons.
+fn mobile_editor_bar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
+    let t = Tokens::get(ui.ctx());
+    let has_photo = app.session.active().is_some();
+    egui::ScrollArea::horizontal().id_salt("mobile-editor-tools").auto_shrink([false, false]).show(ui, |ui| {
+        ui.horizontal_centered(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            for (id, label, icon, panel) in [
+                ("edit", "Edit", Icon::Sliders, RightPanel::Edit),
+                ("crop", "Crop", Icon::Crop, RightPanel::Crop),
+                ("masking", "Masking", Icon::Mask, RightPanel::Masking),
+                ("remove", "Remove", Icon::Eraser, RightPanel::Remove),
+                ("presets", "Presets", Icon::Presets, RightPanel::None),
+            ] {
+                let active = if id == "presets" { app.ui.presets } else { !app.ui.presets && app.ui.right == panel };
+                let response = ui
+                    .add_enabled_ui(has_photo, |ui| {
+                        let (rect, response) = ui.allocate_exact_size(vec2(68.0, 44.0), Sense::click());
+                        register(ui.ctx(), format!("icon:{id}"), rect);
+                        if active {
+                            ui.painter().rect_filled(rect.shrink2(vec2(4.0, 1.0)), 8.0, t.cell_selected);
+                        }
+                        let color = if active { t.accent } else { t.text_dim };
+                        paint(ui.painter(), Rect::from_center_size(pos2(rect.center().x, rect.top() + 15.0), vec2(20.0, 20.0)), icon, color);
+                        ui.painter().text(
+                            pos2(rect.center().x, rect.bottom() - 3.0),
+                            egui::Align2::CENTER_BOTTOM,
+                            crate::i18n::tr(label),
+                            t.font(11.0),
+                            color,
+                        );
+                        response.on_hover_text(label).clicked()
+                    })
+                    .inner;
+                if response && !active {
+                    if id == "presets" {
+                        let _ = app.run("panel.presets", json!({}));
+                    } else {
+                        app.ui.presets = false;
+                        let _ = app.run(&format!("panel.{id}"), json!({}));
+                    }
+                }
+            }
+        });
+    });
 }
 
 /// Phone-accessible catalog actions for the current selection. Albums organize library photos;
@@ -340,7 +400,36 @@ fn sheet(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             .exact_size(BUTTON.y + 4.0)
             // (inside the sheet's 1 pt border: its icons line up with the bars')
             .frame(egui::Frame::NONE.inner_margin(egui::Margin { left: BAR_MARGIN - 1, right: BAR_MARGIN - 1, top: 2, bottom: 2 }))
-            .show(ui, |ui| tools(app, ui));
+            .show(ui, |ui| {
+                if crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail {
+                    let title = if app.ui.presets {
+                        "Presets"
+                    } else {
+                        match app.ui.right {
+                            RightPanel::Crop => "Crop",
+                            RightPanel::Masking => "Masking",
+                            RightPanel::Remove => "Remove",
+                            RightPanel::RedEye => "Red Eye",
+                            RightPanel::Profiles => "Profiles",
+                            RightPanel::Info => "Info",
+                            RightPanel::Keywords => "Keywords",
+                            RightPanel::Versions => "Versions",
+                            RightPanel::Activity => "History",
+                            _ => "Edit",
+                        }
+                    };
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(crate::i18n::tr(title)).strong());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if icon_button(ui, "sheetClose", Icon::ChevronDown, BUTTON, false, true, "Hide controls").clicked() {
+                                close_sheet(app);
+                            }
+                        });
+                    });
+                } else {
+                    tools(app, ui);
+                }
+            });
         if app.ui.presets {
             super::presets::show(app, ui);
         } else {

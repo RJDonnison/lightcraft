@@ -150,19 +150,22 @@ fn exposure(h: &Headless) -> f64 {
     h.app.session.develop_of(id).unwrap_or_default().light.exposure
 }
 
-/// The edit sheet scrolled (mouse wheel) so the Light sliders are clear of the bottom bar; the
-/// Exposure track's rectangle.
+/// Bring Exposure into the visible middle of the edit sheet before sending finger gestures.
 fn exposure_in_view(h: &mut Headless) -> egui::Rect {
     let sheet = widget(h, "panel:sheet").expect("the edit sheet");
     let r = h.request("ui.move", json!({"x": sheet.center().x, "y": sheet.center().y}), T);
     assert_eq!(r["ok"], true, "{r}");
-    let r = h.request("ui.scroll", json!({"dy": -220.0}), T);
-    assert_eq!(r["ok"], true, "{r}");
-    for _ in 0..30 {
-        h.step();
+    let track = widget(h, "slider:light.exposure").expect("the Exposure slider");
+    if track.top() < sheet.top() + 65.0 || track.bottom() > sheet.bottom() - 65.0 {
+        let dy = sheet.center().y - track.center().y;
+        let r = h.request("ui.scroll", json!({"dy": dy}), T);
+        assert_eq!(r["ok"], true, "{r}");
+        for _ in 0..30 {
+            h.step();
+        }
     }
     let track = widget(h, "slider:light.exposure").expect("the Exposure slider");
-    assert!(track.bottom() < sheet.bottom() - 60.0, "Exposure scrolled into view: {track:?} in {sheet:?}");
+    assert!(track.top() > sheet.top() + 50.0 && track.bottom() < sheet.bottom() - 50.0, "Exposure is visible: {track:?} in {sheet:?}");
     track
 }
 

@@ -39,9 +39,15 @@ Below 600pt of width or 500pt of height (inside the safe area), `lightcraft-ui-e
 a compact layout (`crates/ui-egui/src/panels/compact.rs`). It's used on phones in either
 orientation, iPad Split View and phone browsers:
 
-- **Top bar:** My Photos, Back, Menu, a search field, Filter and Export.
-- **Detail view:** the photo on top, and a bottom sheet with a tool row (Presets, Edit, Crop,
-  Remove, Masking, Info …). The sheet shows that panel at full width; Hide puts it away. In
+- **Top bar:** My Photos, Back, Menu, a search field, Filter and Export in the grid; Back,
+  Edit Photo and Export while editing on a touch screen.
+- **Detail view:** the photo on top, with a persistent touch tool bar (Edit, Crop, Masking,
+  Remove, Presets) and a bottom sheet showing the chosen tool. The sheet's Hide button puts
+  its controls away. Edit has horizontally scrollable Light, Curve, Color, Color Grading,
+  Effects, Detail, Optics and Calibration categories; Curve and Grading use their existing
+  editors. Crop presents common aspect ratios above its other controls. Masking puts existing
+  masks first, with a Create New Mask button and Light/Color/Effects/Detail adjustment categories.
+  On non-touch compact windows the tools remain inside the sheet. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.
 - **My Photos:** a full-width drawer (a column at the left in landscape) with a direct Import
@@ -56,7 +62,8 @@ orientation, iPad Split View and phone browsers:
 - **Touch sizes:** on a phone's touch screen buttons, fields, checkboxes and menu items are
   30pt tall (22pt with a mouse). Dialogs span the screen up to 560pt wide and scroll.
 - **Before/After Left/Right** stacks the two views when the photo area is taller than wide.
-- **Bottom bar:** view modes, Sort, Filmstrip and an Edit toggle.
+- **Bottom bar:** view modes, Sort, Filmstrip and an Edit toggle in the grid; labeled editing
+  tools in the touch photo editor.
 - **Loupe gestures:** pinch zooms about the fingers, from Fit to 1600%, and pinching back in
   snaps to Fit. Moving both fingers pans. At Fit, a one-finger swipe sideways drags the photo
   along, and letting go past a sixth of the screen shows the next or previous photo. When
@@ -64,7 +71,8 @@ orientation, iPad Split View and phone browsers:
   zooms on the desktop too.
 - **Sliders by touch:** a drag that starts sideways adjusts the slider by the distance moved;
   one that starts up or down scrolls the panel, even when it begins on a slider's track. A tap
-  doesn't change the value, and double-tap resets. Mouse and trackpad work as on the desktop.
+  doesn't change the value, and double-tap resets. Compact touch sliders have larger thumbs and
+  readouts. Mouse and trackpad work as on the desktop.
 - **Import from the photo library:** File ▸ Import Photos… opens the system picker (PHPicker
   on iOS, Android's photo picker). The chosen photos are copied into `<library>/Picked`, then
   the usual Import review opens. On iOS each photo is fetched as its raw file when it has one,
