@@ -190,20 +190,24 @@ public class LightCraftActivity extends NativeActivity {
             File root = android.os.Environment.getExternalStoragePublicDirectory(photo ? android.os.Environment.DIRECTORY_PICTURES : android.os.Environment.DIRECTORY_DOWNLOADS);
             File folder = new File(root, "LightCraft");
             if (!folder.isDirectory() && !folder.mkdirs()) return "error:cannot create " + destination + " folder";
-            File target = new File(folder, name);
-            for (int i = 2; target.exists() && i < 10000; i++) {
-                int dot = name.lastIndexOf('.');
-                target = new File(folder, dot > 0 ? name.substring(0, dot) + "-" + i + name.substring(dot) : name + "-" + i);
-            }
-            if (target.exists()) return "error:cannot find a free " + destination + " name";
-            try (java.io.InputStream in = new java.io.FileInputStream(source); java.io.OutputStream out = new java.io.FileOutputStream(target)) {
-                byte[] buffer = new byte[65536];
-                int n;
-                while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+            File target = null;
+            try {
+                for (int i = 1; i < 10000; i++) {
+                    int dot = name.lastIndexOf('.');
+                    String candidate = i == 1 ? name : dot > 0 ? name.substring(0, dot) + "-" + i + name.substring(dot) : name + "-" + i;
+                    File next = new File(folder, candidate);
+                    if (next.createNewFile()) { target = next; break; }
+                }
+                if (target == null) return "error:cannot find a free " + destination + " name";
+                try (java.io.InputStream in = new java.io.FileInputStream(source); java.io.OutputStream out = new java.io.FileOutputStream(target)) {
+                    byte[] buffer = new byte[65536];
+                    int n;
+                    while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+                }
                 android.media.MediaScannerConnection.scanFile(this, new String[] {target.getAbsolutePath()}, new String[] {mime}, null);
                 return destination;
             } catch (Exception e) {
-                if (target.exists()) target.delete();
+                if (target != null && target.exists() && !target.delete()) return "error:cannot save to " + destination + ": " + e + "; could not remove partial file " + target.getName();
                 return "error:cannot save to " + destination + ": " + e;
             }
         }
@@ -231,7 +235,13 @@ public class LightCraftActivity extends NativeActivity {
             if (getContentResolver().update(item, ready, null, null) != 1) throw new java.io.IOException("cannot finish " + destination + " item");
             return destination;
         } catch (Exception e) {
-            if (item != null) getContentResolver().delete(item, null, null);
+            if (item != null) {
+                try {
+                    if (getContentResolver().delete(item, null, null) != 1) return "error:cannot save to " + destination + ": " + e + "; could not remove partial item";
+                } catch (Exception cleanup) {
+                    return "error:cannot save to " + destination + ": " + e + "; cannot remove partial item: " + cleanup;
+                }
+            }
             return "error:cannot save to " + destination + ": " + e;
         }
     }

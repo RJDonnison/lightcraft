@@ -64,11 +64,19 @@ final class GalleryBridge {
                     result.add("page"); result.add(Integer.toString(offset)); result.add("0");
                     Uri collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
                     String[] cols = {MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME};
-                    Bundle args = new Bundle();
-                    args.putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, PAGE);
-                    args.putInt(android.content.ContentResolver.QUERY_ARG_OFFSET, offset);
-                    args.putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, MediaStore.Images.Media.DATE_TAKEN + " DESC, " + MediaStore.Images.Media._ID + " DESC");
-                    try (Cursor cursor = activity.getContentResolver().query(collection, cols, args, null)) {
+                    String order = MediaStore.Images.Media.DATE_TAKEN + " DESC, " + MediaStore.Images.Media._ID + " DESC";
+                    Cursor page;
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        Bundle args = new Bundle();
+                        args.putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, PAGE);
+                        args.putInt(android.content.ContentResolver.QUERY_ARG_OFFSET, offset);
+                        args.putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, order);
+                        page = activity.getContentResolver().query(collection, cols, args, null);
+                    } else {
+                        // API 26–29 providers accept a bounded SQL LIMIT in the sort order.
+                        page = activity.getContentResolver().query(collection, cols, null, null, order + " LIMIT " + PAGE + " OFFSET " + offset);
+                    }
+                    try (Cursor cursor = page) {
                         if (cursor != null) {
                             int count = 0;
                             while (cursor.moveToNext() && count < PAGE) {

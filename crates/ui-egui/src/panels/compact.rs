@@ -189,6 +189,15 @@ fn mobile_export_dialog(app: &mut LightcraftApp, ctx: &egui::Context) {
     }
     let format_id = egui::Id::new("mobile-export-format");
     let mut format = ctx.data(|d| d.get_temp::<String>(format_id)).unwrap_or_else(|| "jpeg".into());
+    let selected = &app.session.selection.ids;
+    let dng_available = if selected.is_empty() {
+        app.session.active().and_then(|id| app.session.catalog.photo(id)).is_some_and(|photo| photo.develops_raw())
+    } else {
+        selected.iter().all(|id| app.session.catalog.photo(*id).is_some_and(|photo| photo.develops_raw()))
+    };
+    if format == "dng" && !dng_available {
+        format = "jpeg".into();
+    }
     let mut open = true;
     egui::Window::new(crate::i18n::tr("Export")).collapsible(false).resizable(false).default_width(260.0).open(&mut open).show(ctx, |ui| {
         ui.label(crate::i18n::tr("Format"));
@@ -201,11 +210,14 @@ fn mobile_export_dialog(app: &mut LightcraftApp, ctx: &egui::Context) {
                 ("tiff", "TIFF"),
                 ("psd", "PSD"),
                 ("jxl", "JPEG XL"),
-                ("dng", "DNG"),
                 ("original", "Original + XMP"),
             ] {
                 let response = ui.selectable_value(&mut format, value.into(), label);
                 register(ui.ctx(), format!("mobileExport:{value}"), response.rect);
+            }
+            if dng_available {
+                let response = ui.selectable_value(&mut format, "dng".into(), "DNG");
+                register(ui.ctx(), "mobileExport:dng", response.rect);
             }
         });
         let note = if format == "original" {

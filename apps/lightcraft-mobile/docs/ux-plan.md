@@ -1,8 +1,8 @@
 # Mobile UX plan: library and a simpler phone editor
 
-**Status:** draft; product choices resolved. **Scope:** Android first, with shared compact-touch presentation where appropriate. Desktop behaviour must not change.
+**Status:** MUX-0–MUX-9 implemented; MUX-10 integration checks complete where hardware is available. Android on-device gallery, permissions and publication verification remains open. **Scope:** Android first, with shared compact-touch presentation where appropriate. Desktop behaviour must not change.
 
-Read this plan with the repository's `AGENTS.md` and `apps/lightcraft-mobile/README.md`. The plan describes future work; the work slices below are not implemented by this document.
+Read this plan with the repository's `AGENTS.md` and `apps/lightcraft-mobile/README.md`. The work slices describe the implementation and its remaining on-device verification.
 
 ## Goal and approach
 
@@ -53,6 +53,12 @@ Use a single project task ID per commit (replace the MUX placeholders with the p
 | **MUX-10 — Integration and docs** | Review all flows in portrait, landscape, small Android and at the 600-pt breakpoint; check the desktop snapshot too. Update the mobile README and relevant parity rows, gap tracker and progress numbers only when the associated behavior actually lands. | mobile tests/scripts, README, applicable parity docs | Android device and screenshot checks pass, with `cargo xtask parity` and `cargo xtask ci` green. |
 
 MUX-1 establishes the device/catalog boundary before cross-source thumbnails and export integration. MUX-2 precedes MUX-3; MUX-3's snap heights should precede final Curve and masking layout tuning. MUX-4, MUX-7 and the audit part of MUX-8 can be developed independently once the baseline exists; merge one branch and rerun CI before the next. Do not delegate or create parallel worktrees unless the task owner explicitly requests parallel agents.
+
+### Implementation and verification record
+
+- **MUX-0–MUX-9:** implemented in commits `0ac6083c`, `b82278df`, `36ca63db`, `d5b59423`, `aa5179f0`, `319597cb`, `d67b6cf0`, `e8a31524`, `ae628cf6`, and `b10d0004` (slice order). Every slice passed `cargo xtask ci` before its commit.
+- **MUX-10:** the tracked `ux-tour.jsonl` completes with `snapshot --demo --touch` at 390×844, 360×740 and 844×390. At 600×900 the desktop layout appears; a separate snapshot confirms that boundary. Screenshots are inspected in scratch space, never tracked. Android-target Rust and Java compilation pass, and the gallery and export host boundaries have headless UI tests.
+- **Open hardware gate:** no Android device or emulator was attached. On-device verification of full/selected/denied/revoked MediaStore access, first-edit import, exports appearing in Photos/Downloads, Android 8/9 public-folder writes, system media scanning, and gesture ergonomics remains necessary before claiming the mobile app is release-ready. The source-built mobile shell is not packaged or released.
 
 ## Verification and guardrails
 

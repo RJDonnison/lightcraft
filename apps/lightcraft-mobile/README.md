@@ -253,6 +253,11 @@ The whole UI stays inside the iOS safe area (status bar, Dynamic Island, home in
 
 ## Known problems
 
+- **Android gallery and export still need a device pass.** The MediaStore bridge compiles for
+  Android and its UI and worker boundaries are tested headlessly, but there was no attached
+  Android device during this UX work. Verify selected-only/denied/revoked access, opening a
+  device original, publishing to Photos and Downloads (including Android 8/9), and scanning
+  the result on a physical device or emulator before relying on it for a photo library.
 - **iOS scene lifecycle is adopted by the shell, not winit.** winit 0.30 has no UIScene support,
   and iOS 27 kills apps without it. `src/ios_scene.rs` and the scene manifest in `ios/Info.plist`
   attach winit's window to the scene, which works on iOS 26.5 and 27.0. There's one scene only
