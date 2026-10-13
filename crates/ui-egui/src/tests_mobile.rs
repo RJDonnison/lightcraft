@@ -693,6 +693,8 @@ fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
         assert!(widget(&h, &format!("mask:{}", mask.id)).is_some(), "mask tile in photo rail");
     }
     assert!(widget(&h, "mobileMask:Light").is_some(), "adjustments remain in the sheet");
+    assert!(widget(&h, "button:maskAddComp").is_none(), "management is absent from the lower adjustments");
+    assert!(widget(&h, "component:0").is_none(), "component tree is absent from the lower adjustments");
     let r = h.request("ui.clickWidget", json!({"id": format!("mask:{}", masks[0].id)}), Duration::from_secs(20));
     assert_eq!(r["ok"], true, "{r}");
     h.step();
@@ -700,7 +702,17 @@ fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
     let r = h.request("ui.clickWidget", json!({"id": "mobileMaskRail:add"}), Duration::from_secs(20));
     assert_eq!(r["ok"], true, "{r}");
     h.step();
-    assert!(widget(&h, "maskNew:linear").is_some(), "rail opens creation choices in the sheet");
+    assert!(widget(&h, "maskNew:linear").is_some(), "rail opens creation choices beside the photo");
+    let r = h.request("ui.clickWidget", json!({"id": "mobileMaskRail:add"}), Duration::from_secs(20));
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    let r = h.request("ui.clickWidget", json!({"id": "mobileMaskRail:manage"}), Duration::from_secs(20));
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert!(widget(&h, "button:maskAddComp").is_some(), "the side rail opens component management");
+    assert!(widget(&h, "component:0").is_some(), "the component tree lives in rail management");
+    h.settle(SETTLE);
+    assert!(widget(&h, &format!("mobileMaskRail:preview:{}", masks[0].id)).is_some(), "effective mask has a white-on-black preview");
 }
 
 #[test]

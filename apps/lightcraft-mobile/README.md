@@ -49,10 +49,10 @@ orientation, iPad Split View and phone browsers:
   RGB histogram over the photo; tap the graph to hide it. It starts hidden on phones and does
   not affect the desktop histogram. Crop separates aspect/straightening controls from Geometry,
   with visual aspect cards and larger visible corner and edge handles. Drag a handle to resize
-  or drag inside the frame to move it; rotation uses the explicit controls. Masking puts mask
-  selection, creation, visibility and overlay controls beside the photo, with only the selected
-  mask's components and Light/Color/Effects/Detail adjustments
-  in the sheet.
+   or drag inside the frame to move it; rotation uses the explicit controls. Masking puts
+   effective white-on-black previews, creation, selection, visibility, overlay and component
+   management beside the photo. The lower sheet shows only the selected mask's
+   Light/Color/Effects/Detail adjustments.
   On non-touch compact windows the tools remain inside the sheet. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.
