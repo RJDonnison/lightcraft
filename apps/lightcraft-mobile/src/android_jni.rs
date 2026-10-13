@@ -106,6 +106,24 @@ pub fn take_gallery_open(app: &AndroidApp) -> Option<Vec<String>> {
     take_strings(app, jni_str!("takeGalleryOpen"))
 }
 
+/// Publish an exported private file to the Android Photos or Downloads collection.
+pub fn publish_export(app: &AndroidApp, path: &str) -> Result<String, String> {
+    with_activity(app, |env, activity| {
+        let path = env.new_string(path)?;
+        let result = env
+            .call_method(activity, jni_str!("publishExport"), jni_sig!("(Ljava/lang/String;)Ljava/lang/String;"), &[JValue::Object(&path)])?
+            .l()?;
+        // SAFETY: publishExport returns a java.lang.String and transfers this local reference.
+        let result = unsafe { JString::from_raw(env, result.into_raw()) };
+        result.try_to_string(env)
+    })
+    .map_err(|e| format!("Publishing export: {e}"))
+    .and_then(|status| match status.strip_prefix("error:") {
+        Some(error) => Err(error.to_string()),
+        None => Ok(status),
+    })
+}
+
 /// The activity's `String[] method()`: null as `None`.
 fn take_strings(app: &AndroidApp, method: &jni::strings::JNIStr) -> Option<Vec<String>> {
     let r = with_activity(app, |env, activity| {

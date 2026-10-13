@@ -319,6 +319,8 @@ fn services(export_dir: String) -> Services {
     Services {
         #[cfg(not(target_os = "android"))]
         device_gallery: None,
+        #[cfg(not(target_os = "android"))]
+        mobile_export: None,
         #[cfg(target_os = "android")]
         device_gallery: Some(lightcraft_ui_egui::DeviceGallery {
             request: Box::new(|offset| {
@@ -380,6 +382,21 @@ fn services(export_dir: String) -> Services {
         })),
         // atomic (temp file + sync + rename), inside the sandbox
         write_shared: Some(std::sync::Arc::new(lightcraft_engine::export::write_file)),
+        #[cfg(target_os = "android")]
+        mobile_export: Some(std::sync::Arc::new(|path: &str, bytes: &[u8]| {
+            lightcraft_engine::export::write_file(path, bytes)?;
+            let app = ANDROID_APP.get().ok_or("Android gallery is unavailable")?;
+            match android_jni::publish_export(app, path) {
+                Ok(_) => Ok(()),
+                Err(error) => {
+                    if let Err(cleanup) = std::fs::remove_file(path) {
+                        Err(format!("{error}; cannot remove unpublished export: {cleanup}"))
+                    } else {
+                        Err(error)
+                    }
+                }
+            }
+        })),
         write: Some(Box::new(lightcraft_engine::export::write_file)),
         png: Some(Box::new(|img: &lightcraft_raster::Rgba8| {
             lightcraft_codecs::encode_png(&lightcraft_codecs::EncodeImage::rgba8(img), &lightcraft_codecs::EncodeMeta::default()).unwrap_or_default()

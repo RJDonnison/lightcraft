@@ -17,6 +17,29 @@ use serde_json::{Value, json};
 
 use crate::LightcraftApp;
 
+/// Match the Android publisher's conservative Photos format list. Every sidecar is a Download.
+fn mobile_destination(path: &str) -> &'static str {
+    match std::path::Path::new(path).extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
+        Some("jpg" | "jpeg" | "png" | "webp") => "Photos",
+        _ => "Downloads",
+    }
+}
+
+#[cfg(test)]
+mod mobile_destination_tests {
+    use super::mobile_destination;
+
+    #[test]
+    fn rendered_gallery_formats_and_other_files_have_distinct_destinations() {
+        for extension in ["JPG", "jpeg", "png", "webp"] {
+            assert_eq!(mobile_destination(&format!("edited.{extension}")), "Photos");
+        }
+        for extension in ["avif", "tiff", "psd", "jxl", "dng", "xmp"] {
+            assert_eq!(mobile_destination(&format!("edited.{extension}")), "Downloads");
+        }
+    }
+}
+
 pub struct ExportTask {
     pub total: usize,
     /// Photos started so far and the file in progress.
@@ -27,6 +50,7 @@ pub struct ExportTask {
     rx: Receiver<Result<(Vec<Value>, Option<Value>, bool), String>>,
     /// The export's row in the activity stack (`activity.cancel` sets `cancel`).
     guard: TaskGuard,
+    mobile: bool,
 }
 
 impl ExportTask {
@@ -39,11 +63,18 @@ impl ExportTask {
 
 /// Start exporting `items` in the background, then do `after` with the files written (Add to Apple
 /// Photos). Errors per photo are collected, not fatal.
-pub fn start(app: &mut LightcraftApp, items: Vec<PreparedExport>, opts: ExportOptions, to: Destination, after: AfterExport) -> Result<Value, String> {
+pub fn start(
+    app: &mut LightcraftApp,
+    items: Vec<PreparedExport>,
+    opts: ExportOptions,
+    to: Destination,
+    after: AfterExport,
+    mobile: bool,
+) -> Result<Value, String> {
     if app.export.is_some() {
         return Err("an export is already running".into());
     }
-    let write = app.services.write_shared.clone().ok_or("no background writer")?;
+    let write = if mobile { app.services.mobile_export.clone() } else { app.services.write_shared.clone() }.ok_or("no background writer")?;
     let total = items.len();
     let progress = Arc::new(Mutex::new((0, String::new())));
     let cancel = Arc::new(AtomicBool::new(false));
@@ -81,7 +112,7 @@ pub fn start(app: &mut LightcraftApp, items: Vec<PreparedExport>, opts: ExportOp
     std::thread::Builder::new().name("export".into()).spawn(work).map_err(|e| e.to_string())?;
     #[cfg(target_arch = "wasm32")]
     work();
-    app.export = Some(ExportTask { total, progress, cancel, rx, guard });
+    app.export = Some(ExportTask { total, progress, cancel, rx, guard, mobile });
     Ok(json!({"background": true, "total": total}))
 }
 
@@ -128,7 +159,7 @@ pub fn start_contact_sheet(app: &mut LightcraftApp, params: &Value) -> Result<Va
     work();
     let row = app.session.activity.start("export", "Exporting contact sheet", Cancel::Flag(cancel.clone()));
     row.progress(0, total as u64);
-    app.export = Some(ExportTask { total, progress, cancel, rx, guard: row });
+    app.export = Some(ExportTask { total, progress, cancel, rx, guard: row, mobile: false });
     Ok(json!({"background": true, "total": total}))
 }
 
@@ -182,6 +213,7 @@ pub fn poll_photos(_: &mut LightcraftApp, _: &egui::Context) {}
 /// Per frame: keep the activity row up to date; when the batch finishes, report it.
 pub fn poll(app: &mut LightcraftApp, ctx: &egui::Context) {
     let Some(task) = &app.export else { return };
+    let mobile = task.mobile;
     match task.rx.try_recv() {
         Ok(r) => {
             let cancelled = matches!(&r, Ok((_, _, true)));
@@ -219,11 +251,24 @@ pub fn poll(app: &mut LightcraftApp, ctx: &egui::Context) {
                     }
                     // mobile: offer what was written in the share sheet
                     let paths: Vec<String> = files.iter().filter_map(|f| f.get("path").and_then(Value::as_str)).map(str::to_string).collect();
-                    if !cancelled
+                    if !mobile
+                        && !cancelled
                         && !paths.is_empty()
                         && let Some(share) = app.services.share.as_mut()
                     {
                         share(&paths);
+                    }
+                    if mobile {
+                        let published = files.iter().filter(|f| f.get("path").is_some()).flat_map(|f| {
+                            f.get("path")
+                                .and_then(Value::as_str)
+                                .into_iter()
+                                .chain(f.get("sidecars").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str))
+                        });
+                        let (photos, downloads) = published.fold((0, 0), |(photos, downloads), path| {
+                            if mobile_destination(path) == "Photos" { (photos + 1, downloads) } else { (photos, downloads + 1) }
+                        });
+                        m += &format!(" · {photos} to Photos, {downloads} to Downloads");
                     }
                     app.last_export_result = Some(json!({"files": files, "cancelled": cancelled, "applePhotos": photos}));
                     m

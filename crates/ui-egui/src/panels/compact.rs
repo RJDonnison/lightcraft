@@ -102,6 +102,7 @@ pub fn sheet_open(app: &LightcraftApp) -> bool {
 /// The window's chrome in the compact layout; the caller fills the central area as usual.
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     topbar(app, ui);
+    mobile_export_dialog(app, ui.ctx());
     super::library_problem::banner(app, ui);
     bottombar(app, ui);
     if app.ui.left_panel {
@@ -148,7 +149,11 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 let mut right = ui.new_child(egui::UiBuilder::new().max_rect(rest).layout(egui::Layout::right_to_left(egui::Align::Center)));
                 right.spacing_mut().item_spacing.x = 0.0;
                 if icon_button(&mut right, "share", Icon::Share, BUTTON, false, true, "Export").clicked() {
-                    let _ = app.run("dialog.export", json!({}));
+                    if crate::widgets::touch_screen(right.ctx()) && app.services.mobile_export.is_some() {
+                        right.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile-export-open"), true));
+                    } else {
+                        let _ = app.run("dialog.export", json!({}));
+                    }
                 }
                 if !editor {
                     let filtering = app.session.filter != Default::default() || app.ui.filter_bar;
@@ -172,6 +177,61 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 }
             });
         });
+}
+
+fn mobile_export_dialog(app: &mut LightcraftApp, ctx: &egui::Context) {
+    if app.services.mobile_export.is_none() || !crate::widgets::touch_screen(ctx) {
+        return;
+    }
+    let id = egui::Id::new("mobile-export-open");
+    if !ctx.data(|d| d.get_temp::<bool>(id)).unwrap_or(false) {
+        return;
+    }
+    let format_id = egui::Id::new("mobile-export-format");
+    let mut format = ctx.data(|d| d.get_temp::<String>(format_id)).unwrap_or_else(|| "jpeg".into());
+    let mut open = true;
+    egui::Window::new(crate::i18n::tr("Export")).collapsible(false).resizable(false).default_width(260.0).open(&mut open).show(ctx, |ui| {
+        ui.label(crate::i18n::tr("Format"));
+        egui::ComboBox::from_id_salt("mobile-export-format-select").selected_text(format.to_uppercase()).show_ui(ui, |ui| {
+            for (value, label) in [
+                ("jpeg", "JPEG"),
+                ("png", "PNG"),
+                ("webp", "WebP"),
+                ("avif", "AVIF"),
+                ("tiff", "TIFF"),
+                ("psd", "PSD"),
+                ("jxl", "JPEG XL"),
+                ("dng", "DNG"),
+                ("original", "Original + XMP"),
+            ] {
+                let response = ui.selectable_value(&mut format, value.into(), label);
+                register(ui.ctx(), format!("mobileExport:{value}"), response.rect);
+            }
+        });
+        let note = if format == "original" {
+            "Original: Photos for JPEG/PNG/WebP, otherwise Downloads. XMP: Downloads".to_string()
+        } else {
+            let destination = if matches!(format.as_str(), "jpeg" | "png" | "webp") { "Photos" } else { "Downloads" };
+            format!("Saved to {destination}; sidecars go to Downloads")
+        };
+        ui.label(note);
+        let export = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(crate::i18n::tr("Export")));
+        register(ui.ctx(), "mobileExport:submit", export.rect);
+        if export.clicked() {
+            match app.run("app.export", json!({"format": format, "background": true, "mobileDestination": true})) {
+                Ok(_) => {
+                    ctx.data_mut(|d| d.insert_temp(id, false));
+                }
+                Err(e) => app.toast(ctx, e),
+            }
+        }
+    });
+    ctx.data_mut(|d| {
+        d.insert_temp(format_id, format);
+        if !open {
+            d.insert_temp(id, false);
+        }
+    });
 }
 
 /// The search field in `r` (same id and command as the desktop top bar's).

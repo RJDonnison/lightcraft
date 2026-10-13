@@ -146,14 +146,14 @@ orientation, iPad Split View and phone browsers:
   can't hold a whole export (Android's 128–256 MB limits) renders it in tiles too, instead of on
   the CPU. Edits that read the whole photo (spot
   removal, Refine Edges, Auto Mask brushes, subject/background masks) still export smaller.
-- **Export and share:** exports go to a folder next to the library (`Documents/LightCraft
-  Exports` on iOS, so they show in the Files app; the app's private files on Android). When an
-  export from the Export dialog finishes, the share sheet opens with the files: AirDrop, Save
-  to Photos, Messages and other apps. On iOS that's UIActivityViewController
-  (`src/ios_share.rs`, anchored as a popover on iPad). On Android it's an `ACTION_SEND` chooser
-  over `content://` URIs from a small read-only `FilesProvider` (androidx's FileProvider
-  without androidx). `ui-egui` gained two optional host services for this, `export_dir` and
-  `share`.
+- **Export and share:** on Android, the phone Export button offers a compact format chooser.
+  JPEG, PNG and WebP exports publish to Photos; other formats and XMP sidecars publish to
+  Downloads. Original files follow their actual extension. The cancellable background export
+  reports write failures and the published destinations. Android 10+ publishes through
+  MediaStore; Android 9 and earlier request storage permission to save in public folders.
+  Other export commands still use the share sheet via read-only `FilesProvider` URIs. On iOS,
+  exports go to `Documents/LightCraft Exports`, and UIActivityViewController offers them in
+  AirDrop, Files, Photos and other apps (`src/ios_share.rs`).
 - **Hardware keyboard (iPad):** shortcuts work from a Magic Keyboard or any Bluetooth keyboard,
   with ⌘ as the command key (menus show ⌘), plus arrows, Escape and the single-key shortcuts.
   winit 0.30's iOS view only receives typed text, so while no text field has focus a hidden view

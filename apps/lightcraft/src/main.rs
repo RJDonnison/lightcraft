@@ -406,6 +406,7 @@ fn services(cc: &eframe::CreationContext<'_>, log_file: Option<&std::path::Path>
     let _ = DIALOG_PARENT.set(rfd::FileDialog::new().set_parent(cc));
     Services {
         device_gallery: None,
+        mobile_export: None,
         // Commands' file dialogs run on their own thread (#191): a dialog on the UI thread
         // stopped the window answering the compositor, which then reported the app as hung.
         picker: Some(Box::new(move |req: lightcraft_ui_egui::pick::PickRequest| {

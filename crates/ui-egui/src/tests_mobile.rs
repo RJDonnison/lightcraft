@@ -49,6 +49,79 @@ fn widget(h: &Headless, id: &str) -> Option<egui::Rect> {
 }
 
 #[test]
+fn phone_export_uses_small_chooser_and_mobile_publisher() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let published = Arc::new(AtomicUsize::new(0));
+    let count = published.clone();
+    let dir = std::env::temp_dir().join(format!("lc-phone-export-{}", std::process::id()));
+    let services = Services {
+        export_dir: Some(dir.to_string_lossy().into_owned()),
+        write_shared: Some(Arc::new(|_, _| panic!("mobile export must not use the normal share writer"))),
+        mobile_export: Some(Arc::new(move |_, bytes| {
+            assert!(!bytes.is_empty());
+            count.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    app.ui.view = ViewMode::Detail;
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    let r = h.request("ui.clickWidget", json!({"id":"icon:share"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(widget(&h, "mobileExport:submit").is_some());
+    assert!(h.app.ui.dialog.is_none(), "the desktop export dialog must remain closed");
+    let r = h.request("ui.clickWidget", json!({"id":"mobileExport:submit"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(h.app.export.is_some(), "export should run as a cancellable background task");
+    for _ in 0..200 {
+        h.step();
+        if published.load(Ordering::SeqCst) > 0 || h.app.export.is_none() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(
+        published.load(Ordering::SeqCst) > 0,
+        "the Android publisher receives rendered bytes: export={:?}, toast={:?}",
+        h.app.last_export_result,
+        h.app.ui.toast
+    );
+}
+
+#[test]
+fn phone_export_reports_publication_failure_without_success() {
+    use std::sync::Arc;
+
+    let services = Services {
+        export_dir: Some(std::env::temp_dir().join(format!("lc-phone-error-{}", std::process::id())).to_string_lossy().into_owned()),
+        mobile_export: Some(Arc::new(|_, _| Err("Photos storage is full".into()))),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    app.ui.view = ViewMode::Detail;
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    let result = h.app.run("app.export", json!({"format": "jpeg", "mobileDestination": true, "background": true}));
+    assert!(result.is_ok(), "{result:?}");
+    for _ in 0..200 {
+        h.step();
+        if h.app.export.is_none() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let files = h.app.last_export_result.as_ref().and_then(|v| v["files"].as_array());
+    assert!(files.is_some_and(|f| f.iter().any(|entry| entry["error"].as_str().is_some_and(|e| e.contains("Photos storage is full")))));
+    assert!(!files.is_some_and(|f| f.iter().any(|entry| entry["path"].is_string())));
+}
+
+#[test]
 fn phone_device_photos_browse_previews_without_import_then_switch_to_edits() {
     use std::sync::{Arc, Mutex};
 

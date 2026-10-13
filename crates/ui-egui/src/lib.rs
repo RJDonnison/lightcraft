@@ -235,6 +235,9 @@ pub struct Services {
     pub write: Option<WriteFn>,
     /// Thread-safe writer: with it, UI-started exports run in the background (desktop only).
     pub write_shared: Option<SharedWrite>,
+    /// Android phone export writer: save and publish each file to Photos or Downloads.
+    /// Used only by a compact-touch Export request, never by desktop or other export commands.
+    pub mobile_export: Option<SharedWrite>,
     /// PNG encoder (the host links an image encoder; the UI crate stays codec-free).
     pub png: Option<PngEncode>,
     /// Show a file in the system file manager (desktop only).

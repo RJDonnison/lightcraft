@@ -166,6 +166,76 @@ public class LightCraftActivity extends NativeActivity {
         });
     }
 
+    /** Publish a completed app-private export into Photos or Downloads. Called on the export worker. */
+    public String publishExport(String path) {
+        File source = new File(path);
+        if (!source.isFile()) return "error:export file is missing";
+        String name = source.getName();
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        boolean photo = lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp");
+        String destination = photo ? "Photos" : "Downloads";
+        String mime;
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) mime = "image/jpeg";
+        else if (lower.endsWith(".png")) mime = "image/png";
+        else if (lower.endsWith(".webp")) mime = "image/webp";
+        else if (lower.endsWith(".tif") || lower.endsWith(".tiff")) mime = "image/tiff";
+        else if (lower.endsWith(".avif")) mime = "image/avif";
+        else if (lower.endsWith(".xmp")) mime = "application/rdf+xml";
+        else mime = "application/octet-stream";
+        if (android.os.Build.VERSION.SDK_INT < 29) {
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread(() -> requestPermissions(new String[] {android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 817));
+                return "error:allow storage access and retry export";
+            }
+            File root = android.os.Environment.getExternalStoragePublicDirectory(photo ? android.os.Environment.DIRECTORY_PICTURES : android.os.Environment.DIRECTORY_DOWNLOADS);
+            File folder = new File(root, "LightCraft");
+            if (!folder.isDirectory() && !folder.mkdirs()) return "error:cannot create " + destination + " folder";
+            File target = new File(folder, name);
+            for (int i = 2; target.exists() && i < 10000; i++) {
+                int dot = name.lastIndexOf('.');
+                target = new File(folder, dot > 0 ? name.substring(0, dot) + "-" + i + name.substring(dot) : name + "-" + i);
+            }
+            if (target.exists()) return "error:cannot find a free " + destination + " name";
+            try (java.io.InputStream in = new java.io.FileInputStream(source); java.io.OutputStream out = new java.io.FileOutputStream(target)) {
+                byte[] buffer = new byte[65536];
+                int n;
+                while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+                android.media.MediaScannerConnection.scanFile(this, new String[] {target.getAbsolutePath()}, new String[] {mime}, null);
+                return destination;
+            } catch (Exception e) {
+                if (target.exists()) target.delete();
+                return "error:cannot save to " + destination + ": " + e;
+            }
+        }
+        android.content.ContentValues values = new android.content.ContentValues();
+        values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name);
+        values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime);
+        values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+            (photo ? android.os.Environment.DIRECTORY_PICTURES : android.os.Environment.DIRECTORY_DOWNLOADS) + "/LightCraft");
+        values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1);
+        android.net.Uri collection = photo ? android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            : android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+        android.net.Uri item = null;
+        try {
+            item = getContentResolver().insert(collection, values);
+            if (item == null) return "error:cannot create " + destination + " item";
+            try (java.io.InputStream in = new java.io.FileInputStream(source);
+                 java.io.OutputStream out = getContentResolver().openOutputStream(item)) {
+                if (out == null) throw new java.io.IOException("cannot open " + destination + " output");
+                byte[] buffer = new byte[65536];
+                int n;
+                while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+            }
+            android.content.ContentValues ready = new android.content.ContentValues();
+            ready.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0);
+            if (getContentResolver().update(item, ready, null, null) != 1) throw new java.io.IOException("cannot finish " + destination + " item");
+            return destination;
+        } catch (Exception e) {
+            if (item != null) getContentResolver().delete(item, null, null);
+            return "error:cannot save to " + destination + ": " + e;
+        }
+    }
+
     private volatile TextInput textInput;
 
     /** Wakes the Rust event loop (registered by the shell over JNI; see {@code android_jni}). */

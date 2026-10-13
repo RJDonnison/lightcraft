@@ -460,7 +460,20 @@ pub fn default_export_dir(services: &crate::Services) -> String {
 /// (exact output file, single photo), `ids` (default: the selection, else the active photo).
 pub fn export_active(app: &mut LightcraftApp, p: &Value) -> Result<Value, String> {
     use lightcraft_engine::export::{Destination, ExportOptions, export_batch};
-    let p = &app.session.export_params(p)?;
+    let mobile = p.get("mobileDestination") == Some(&Value::Bool(true));
+    if mobile && app.services.mobile_export.is_none() {
+        return Err("mobile gallery export is unavailable".into());
+    }
+    let mut request = p.clone();
+    if let Some(map) = request.as_object_mut() {
+        map.remove("mobileDestination");
+        if mobile {
+            map.remove("path");
+            map.insert("dir".into(), json!(default_export_dir(&app.services)));
+            map.insert("background".into(), json!(true));
+        }
+    }
+    let p = &app.session.export_params(&request)?;
     let mut opts = ExportOptions::from_params(p).map_err(|e| e.to_string())?;
     if let (Some(path), None) = (p.get("path").and_then(Value::as_str), p.get("format")) {
         let ext = path.rsplit_once('.').map_or("", |(_, e)| e);
@@ -507,10 +520,11 @@ pub fn export_active(app: &mut LightcraftApp, p: &Value) -> Result<Value, String
     let to = Destination { dir: dir.clone(), exact };
     // Add to Apple Photos: refused here, before anything is written, when it can't be done
     let after = app.session.after_export(&opts)?;
-    let background = p.get("background").and_then(Value::as_bool).unwrap_or(false) && app.services.write_shared.is_some();
+    let background = p.get("background").and_then(Value::as_bool).unwrap_or(false)
+        && (if mobile { app.services.mobile_export.is_some() } else { app.services.write_shared.is_some() });
     let out = if background {
         let items = lightcraft_engine::export::prepare_batch(&mut app.session, &ids, &opts)?;
-        crate::export_task::start(app, items, opts, to, after)?
+        crate::export_task::start(app, items, opts, to, after, mobile)?
     } else {
         let w = app.services.write.as_mut().ok_or("no writer")?;
         let files = export_batch(&mut app.session, &ids, &opts, &to, &mut |path, bytes| w(path, bytes), &|path| std::path::Path::new(path).exists())?;
