@@ -239,22 +239,20 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
             curve_editor(app, ui, id, d);
         }
         if focus.as_deref() == Some("light") {
-            egui::ScrollArea::horizontal().id_salt("mobile-edit-actions").show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    if text_button(ui, "auto", crate::i18n::tr("Auto"), false).clicked() {
-                        let _ = app.run("develop.auto", json!({}));
-                        app.toast(ui.ctx(), crate::i18n::tr("Auto settings applied"));
-                    }
-                    if text_button(ui, "bw", crate::i18n::tr("B&W"), crate::is_bw(d)).clicked() {
-                        let _ = app.run("develop.treatment", json!({}));
-                    }
-                    if text_button(ui, "hdr", crate::i18n::tr("HDR"), d.hdr.enabled).clicked() {
-                        let _ = app.run("develop.hdr", json!({"enabled": !d.hdr.enabled}));
-                    }
-                    if text_button(ui, "reset", crate::i18n::tr("Reset"), false).clicked() {
-                        reset_clicked = true;
-                    }
-                });
+            ui.horizontal_wrapped(|ui| {
+                if text_button(ui, "auto", crate::i18n::tr("Auto"), false).clicked() {
+                    let _ = app.run("develop.auto", json!({}));
+                    app.toast(ui.ctx(), crate::i18n::tr("Auto settings applied"));
+                }
+                if text_button(ui, "bw", crate::i18n::tr("B&W"), crate::is_bw(d)).clicked() {
+                    let _ = app.run("develop.treatment", json!({}));
+                }
+                if text_button(ui, "hdr", crate::i18n::tr("HDR"), d.hdr.enabled).clicked() {
+                    let _ = app.run("develop.hdr", json!({"enabled": !d.hdr.enabled}));
+                }
+                if text_button(ui, "reset", crate::i18n::tr("Reset"), false).clicked() {
+                    reset_clicked = true;
+                }
             });
         }
         ui.add_space(8.0);
@@ -474,25 +472,23 @@ fn set_mobile_edit_focus(ctx: &egui::Context, focus: &str) {
 fn mobile_edit_navigation(ui: &mut egui::Ui) -> String {
     let key = egui::Id::new("mobile-edit-category");
     let mut focus = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| "light".into());
-    egui::ScrollArea::horizontal().id_salt("mobile-edit-categories").show(ui, |ui| {
-        ui.horizontal(|ui| {
-            for (id, label) in [
-                ("light", "Light"),
-                ("color", "Color"),
-                ("effects", "Effects"),
-                ("detail", "Detail"),
-                ("optics", "Optics"),
-                ("calibration", "Calibration"),
-            ] {
-                let selected = focus == id || (id == "light" && focus == "curve") || (id == "color" && focus == "grading");
-                let r = ui.selectable_label(selected, crate::i18n::tr(label));
-                register(ui.ctx(), format!("mobileEdit:{id}"), r.rect);
-                if r.clicked() {
-                    focus = id.into();
-                    set_mobile_edit_focus(ui.ctx(), id);
-                }
+    ui.horizontal_wrapped(|ui| {
+        for (id, label) in [
+            ("light", "Light"),
+            ("color", "Color"),
+            ("effects", "Effects"),
+            ("detail", "Detail"),
+            ("optics", "Optics"),
+            ("calibration", "Calibration"),
+        ] {
+            let selected = focus == id || (id == "light" && focus == "curve") || (id == "color" && focus == "grading");
+            let r = ui.selectable_label(selected, crate::i18n::tr(label));
+            register(ui.ctx(), format!("mobileEdit:{id}"), r.rect);
+            if r.clicked() {
+                focus = id.into();
+                set_mobile_edit_focus(ui.ctx(), id);
             }
-        });
+        }
     });
     focus
 }

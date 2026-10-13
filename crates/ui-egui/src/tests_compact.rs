@@ -282,14 +282,12 @@ fn phone_slider_readout_is_not_editable_and_edge_double_taps_step() {
 fn phone_curve_scrolls_from_empty_space_but_dragging_a_point_edits_it() {
     let mut h = demo([390.0, 844.0], json!({"view": "detail", "right": "edit"}));
     touch_screen(&mut h);
-    click(&mut h, "mobileSheet:handle");
     click(&mut h, "mobileEdit:curve");
     click(&mut h, "curveChannel:master");
     let graph = widget(&h, "curve").expect("curve graph");
-    let sheet = widget(&h, "panel:sheet").expect("expanded sheet");
-    assert!(graph.height() < sheet.height() - 120.0, "graph fits in expanded sheet: {graph:?} {sheet:?}");
-    click(&mut h, "mobileSheet:handle");
-    let graph = widget(&h, "curve").expect("curve graph in short sheet");
+    let sheet = widget(&h, "panel:sheet").expect("fixed sheet");
+    assert!(widget(&h, "mobileSheet:handle").is_none());
+    assert!(graph.height() < sheet.height() - 100.0, "graph fits in fixed sheet: {graph:?} {sheet:?}");
     let id = h.app.session.active().expect("photo");
     let before = h.app.session.develop_of(id).unwrap_or_default().curve.master.clone();
     let empty = graph.left_top() + egui::vec2(graph.width() * 0.15, 55.0);

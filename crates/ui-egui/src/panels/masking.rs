@@ -404,18 +404,16 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         let key = egui::Id::new(("mobile-mask-adjustments", id));
         let mut selected = ui.ctx().data(|data| data.get_temp::<usize>(key)).unwrap_or(0);
         let mut changed = false;
-        egui::ScrollArea::horizontal().id_salt("mobile-mask-categories").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for (index, label) in ["Light", "Color", "Effects", "Detail"].iter().enumerate() {
-                    let response = ui.selectable_label(index == selected, crate::i18n::tr(label));
-                    register(ui.ctx(), format!("mobileMask:{label}"), response.rect);
-                    if response.clicked() {
-                        selected = index;
-                        changed = true;
-                        ui.ctx().data_mut(|data| data.insert_temp(key, selected));
-                    }
+        ui.horizontal_wrapped(|ui| {
+            for (index, label) in ["Light", "Color", "Effects", "Detail"].iter().enumerate() {
+                let response = ui.selectable_label(index == selected, crate::i18n::tr(label));
+                register(ui.ctx(), format!("mobileMask:{label}"), response.rect);
+                if response.clicked() {
+                    selected = index;
+                    changed = true;
+                    ui.ctx().data_mut(|data| data.insert_temp(key, selected));
                 }
-            });
+            }
         });
         if changed {
             ui.scroll_to_cursor(Some(egui::Align::TOP));

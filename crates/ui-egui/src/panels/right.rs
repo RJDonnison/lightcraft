@@ -151,16 +151,14 @@ fn crop(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let d = app.session.develop_of(id).unwrap_or_default();
     header(ui, "Crop");
     if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
-        egui::ScrollArea::horizontal().id_salt("mobile-crop-aspects").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for (label, aspect) in [("Free", "free"), ("Original", "original"), ("1 × 1", "1x1"), ("4 × 5", "4x5"), ("16 × 9", "16x9")] {
-                    let response = ui.add_sized([72.0, 40.0], egui::Button::new(crate::i18n::tr(label)));
-                    crate::widgets::register(ui.ctx(), format!("mobileCrop:{aspect}"), response.rect);
-                    if response.clicked() {
-                        let _ = app.run("crop.aspect", json!({"aspect": aspect}));
-                    }
+        ui.horizontal_wrapped(|ui| {
+            for (label, aspect) in [("Free", "free"), ("Original", "original"), ("1 × 1", "1x1"), ("4 × 5", "4x5"), ("16 × 9", "16x9")] {
+                let response = ui.add_sized([72.0, 40.0], egui::Button::new(crate::i18n::tr(label)));
+                crate::widgets::register(ui.ctx(), format!("mobileCrop:{aspect}"), response.rect);
+                if response.clicked() {
+                    let _ = app.run("crop.aspect", json!({"aspect": aspect}));
                 }
-            });
+            }
         });
     }
     padded(ui, |ui| {

@@ -485,10 +485,6 @@ pub(super) fn close_sheet(app: &mut LightcraftApp) {
     app.ui.presets = false;
 }
 
-fn tall_sheet(ctx: &egui::Context) -> bool {
-    ctx.data(|d| d.get_temp::<bool>(egui::Id::new("mobile-sheet-tall"))).unwrap_or(false)
-}
-
 /// The bottom sheet: a row of tools, then the right panel or Presets at full width. In a wide
 /// window ([`beside`]) it is a column at the right of the photo.
 fn sheet(app: &mut LightcraftApp, ui: &mut egui::Ui) {
@@ -497,24 +493,18 @@ fn sheet(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let panel = if beside(ui.ctx()) {
         egui::Panel::right("compact_sheet_side").exact_size(side_width(avail.width()))
     } else {
-        // the photo keeps the upper part; the sheet gets the rest, within reason
-        let fraction = if crate::widgets::touch_screen(ui.ctx()) && tall_sheet(ui.ctx()) { 0.8 } else { 0.5 };
-        let height = (avail.height() * fraction).clamp(220.0, (avail.height() - 120.0).max(220.0));
+        // One stable height on a touch phone: leave room for the photo and the active tool.
+        let touch = crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail;
+        let height = if touch {
+            (avail.height() * 0.46).clamp(280.0, (avail.height() - 160.0).max(280.0))
+        } else {
+            (avail.height() * 0.5).clamp(220.0, (avail.height() - 160.0).max(220.0))
+        };
         egui::Panel::bottom("compact_sheet").exact_size(height)
     };
     panel.resizable(false).frame(egui::Frame::NONE.fill(t.chrome).stroke(Stroke::new(1.0, t.divider))).show(ui, |ui| {
         register(ui.ctx(), "panel:sheet", ui.max_rect());
-        if crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail {
-            // A narrow handle replaces the redundant tool title. A tap or vertical pull switches
-            // between half and tall; it never overlaps the editor's scrolling content.
-            let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::click_and_drag());
-            register(ui.ctx(), "mobileSheet:handle", rect);
-            ui.painter().rect_filled(Rect::from_center_size(rect.center(), vec2(42.0, 4.0)), 3.0, t.text_dim);
-            if response.clicked() || (response.drag_stopped() && response.drag_delta().y.abs() > 28.0) {
-                let tall = if response.clicked() { !tall_sheet(ui.ctx()) } else { response.drag_delta().y < 0.0 };
-                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile-sheet-tall"), tall));
-            }
-        } else {
+        if !(crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail) {
             egui::Panel::top("compact_sheet_tools")
                 .exact_size(BUTTON.y + 4.0)
                 .frame(egui::Frame::NONE.inner_margin(egui::Margin { left: BAR_MARGIN - 1, right: BAR_MARGIN - 1, top: 2, bottom: 2 }))

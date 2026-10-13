@@ -292,24 +292,45 @@ fn phone_presets_show_photo_variants_without_a_hover_or_setting() {
 }
 
 #[test]
-fn phone_sheet_snaps_taller_and_dismisses_on_photo_tap() {
+fn phone_sheet_has_one_height_and_dismisses_on_photo_tap() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     assert!(widget(&h, "panel:sheet").is_some());
-    assert!(widget(&h, "mobileSheet:handle").is_some());
+    assert!(widget(&h, "mobileSheet:handle").is_none(), "no sheet drag bar");
     assert!(widget(&h, "icon:sheetClose").is_none(), "no duplicate heading or Hide button");
-    let short = widget(&h, "panel:sheet").unwrap().height();
-    let handle = widget(&h, "mobileSheet:handle").unwrap().center();
-    tap(&mut h, handle);
-    let tall = widget(&h, "panel:sheet").unwrap().height();
-    assert!(tall > short + 100.0, "two useful sheet heights: {short} / {tall}");
-    let handle = widget(&h, "mobileSheet:handle").unwrap().center();
-    tap(&mut h, handle);
-    assert!((widget(&h, "panel:sheet").unwrap().height() - short).abs() < 2.0);
+    let height = widget(&h, "panel:sheet").unwrap().height();
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!((widget(&h, "panel:sheet").unwrap().height() - height).abs() < 2.0);
 
     let canvas = h.app.canvas_rect.expect("photo canvas");
     tap(&mut h, canvas.center());
     assert!(widget(&h, "panel:sheet").is_none(), "tapping the photo dismisses controls");
     assert_eq!(h.app.ui.zoom, crate::state::Zoom::Fit, "dismissal does not also zoom the photo");
+}
+
+#[test]
+fn small_phone_shows_all_edit_mask_and_crop_choices_without_sideways_scrolling() {
+    let mut h = touch_app(ViewMode::Detail, [360.0, 740.0]);
+    let click = |h: &mut Headless, id: &str| {
+        let result = h.request("ui.clickWidget", json!({"id": id}), SETTLE);
+        assert_eq!(result["ok"], true, "{id}: {result}");
+        h.step();
+    };
+    let all_fit = |h: &Headless, ids: &[&str]| {
+        let sheet = widget(h, "panel:sheet").expect("sheet");
+        for id in ids {
+            let r = widget(h, id).expect("option exists");
+            assert!(r.left() >= sheet.left() && r.right() <= sheet.right(), "{id} fits horizontally: {r:?} in {sheet:?}");
+        }
+    };
+    all_fit(&h, &["mobileEdit:light", "mobileEdit:color", "mobileEdit:effects", "mobileEdit:detail", "mobileEdit:optics", "mobileEdit:calibration"]);
+    click(&mut h, "icon:crop");
+    all_fit(&h, &["mobileCrop:free", "mobileCrop:original", "mobileCrop:1x1", "mobileCrop:4x5", "mobileCrop:16x9"]);
+    click(&mut h, "icon:masking");
+    h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
+    h.settle(SETTLE);
+    all_fit(&h, &["mobileMask:Light", "mobileMask:Color", "mobileMask:Effects", "mobileMask:Detail"]);
 }
 
 /// Photos in the grid whose middle is on screen (between the header and `bottom`).
