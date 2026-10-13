@@ -241,6 +241,28 @@ fn snapshot_subcommand_renders_the_ui_headlessly() {
     assert_eq!((d.width, d.height), (640, 480));
 }
 
+#[test]
+fn mobile_ux_tour_requires_touch_and_renders_editor_sheets() {
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../lightcraft-mobile/scripts/ux-tour.jsonl");
+    let output = tmp("mobile-ux-tour.png");
+    let run = |touch: bool| {
+        let mut cmd = Command::new(BIN);
+        cmd.args(["snapshot", "--demo", "--script", script, "-o", output.to_str().unwrap(), "--size", "390x844"]);
+        if touch {
+            cmd.arg("--touch");
+        }
+        cmd.output().unwrap()
+    };
+    let o = run(true);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let replies: Vec<Value> = String::from_utf8_lossy(&o.stdout).lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert!(replies.iter().all(|r| r["ok"] == true), "{replies:?}");
+    let shot = lightcraft_codecs::decode(&std::fs::read(&output).unwrap(), Default::default()).unwrap();
+    assert_eq!((shot.width, shot.height), (390, 844));
+    let without_touch = run(false);
+    assert!(!without_touch.status.success(), "non-touch viewport unexpectedly rendered touch-only navigation");
+}
+
 /// Issue #166: a scripted request that fails makes `snapshot` exit non-zero. The failed reply is
 /// still printed, the later lines still run, and the final `-o` screenshot is still written.
 #[test]

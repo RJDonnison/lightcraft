@@ -1,0 +1,19 @@
+# Run with: lightcraft-cli snapshot --demo --touch --script apps/lightcraft-mobile/scripts/ux-tour.jsonl -o /tmp/opencode/mobile-ux.png --size 390x844
+# Run at 390x844, 360x740 and 844x390. At 600x900 the desktop layout starts;
+# capture that boundary separately with snapshot --demo --touch -o /tmp/opencode/desktop-boundary.png --size 600x900.
+{"method":"ui.settle"}
+{"method":"ui.screenshot"}
+{"method":"ui.set","params":{"view":"detail","right":"edit"}}
+{"method":"ui.settle"}
+{"method":"ui.screenshot"}
+{"method":"ui.clickWidget","params":{"id":"icon:masking"}}
+{"method":"ui.screenshot"}
+{"method":"ui.clickWidget","params":{"id":"icon:crop"}}
+{"method":"ui.screenshot"}
+{"method":"ui.clickWidget","params":{"id":"icon:presets"}}
+{"method":"ui.screenshot"}
+{"method":"ui.clickWidget","params":{"id":"icon:edit"}}
+{"method":"ui.clickWidget","params":{"id":"mobileEdit:curve"}}
+{"method":"ui.screenshot"}
+{"method":"ui.clickWidget","params":{"id":"icon:share"}}
+{"method":"ui.screenshot"}

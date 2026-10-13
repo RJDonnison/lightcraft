@@ -370,6 +370,19 @@ impl Headless {
         self.events.extend(events);
     }
 
+    /// Tell egui that this viewport has a touch device, even before its first gesture.
+    /// A cancelled contact does not press a button or change the photo.
+    pub fn announce_touch(&mut self) {
+        self.input([egui::Event::Touch {
+            device_id: egui::TouchDeviceId(1),
+            id: egui::TouchId(0),
+            phase: egui::TouchPhase::Cancel,
+            pos: egui::Pos2::ZERO,
+            force: None,
+        }]);
+        self.step();
+    }
+
     /// Report these safe-area insets from the next frame on (egui keeps them until changed).
     pub fn set_safe_area(&mut self, insets: egui::SafeAreaInsets) {
         self.safe_area = Some(insets);

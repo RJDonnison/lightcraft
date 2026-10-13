@@ -158,6 +158,7 @@ scissor clipping as egui's GPU backends, so the image matches the window (minus 
 ```text
 lightcraft-cli snapshot --demo -o grid.png --size 1600x1000 [--scale 2]
 lightcraft-cli snapshot --library DIR --script tour.jsonl -o shot.png
+lightcraft-cli snapshot --demo --touch --script apps/lightcraft-mobile/scripts/ux-tour.jsonl -o /tmp/ux.png --size 390x844
 ```
 
 Headless screenshot dimensions must be finite and at least one logical point, with a finite,
@@ -171,7 +172,9 @@ and rasterization both convert them to native viewport points before rounding th
 pixels. A native edge below one point after zooming out is valid if it rounds to at least
 one pixel.
 
-  `tour.jsonl` holds one request per line (`#` comments allowed), e.g.
+  `--touch` announces a touch device before the first frame. Use it for phone UI baselines;
+  viewport size alone does not activate touch-only controls. `tour.jsonl` holds one request per
+  line (`#` comments allowed), e.g.
   `{"method": "ui.set", "params": {"view": "detail", "right": "edit", "openSections": ["optics"]}}`
   then `{"method": "ui.screenshot"}`. Replies are printed to stdout. A failed request
   (`"ok": false`) does not stop the script — the remaining lines and the final screenshot still
