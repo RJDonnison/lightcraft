@@ -402,6 +402,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let d = (*photo.develop).clone();
     // the full-screen preview shows the photo only: no tool overlays
     let right = if fullscreen { RightPanel::None } else { app.ui.right };
+    let mobile_mask = compact && crate::widgets::touch_screen(ui.ctx()) && right == RightPanel::Masking;
     let crop_tool = right == RightPanel::Crop;
     let frame = Frame::with_lens(photo.width.max(1) as usize, photo.height.max(1) as usize, &d, !crop_tool, photo.embedded_lens.as_ref());
     let aspect = frame.aspect() as f32;
@@ -413,6 +414,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     } else {
         24.0
     });
+    let area = if mobile_mask { Rect::from_min_max(area.min, pos2((area.right() - 60.0).max(area.left()), area.bottom())) } else { area };
     let native = output_px(&frame);
     let texture_side = texture_side(ui.ctx());
     // two views (before, after): side by side or stacked
@@ -453,7 +455,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     // another crop): a texture's whole-pixel size is a little off the exact aspect, and the crop
     // tool's overlays need the frame's own geometry.
     let display_aspect = visible_texture_aspect.filter(|a| !crop_tool && (a / aspect - 1.0).abs() > 0.02).unwrap_or(aspect);
-    let resp = ui.interact(canvas, egui::Id::new("loupe"), Sense::click_and_drag());
+    let interaction =
+        if mobile_mask { Rect::from_min_max(canvas.min, pos2((canvas.right() - 60.0).max(canvas.left()), canvas.bottom())) } else { canvas };
+    let resp = ui.interact(interaction, egui::Id::new("loupe"), Sense::click_and_drag());
     // a touch swipe to the next / previous photo drags the photo along
     let mut target_rect = fit_rect(main_area, display_aspect, app.ui.zoom, native, ppp, app.ui.pan).translate(vec2(swipe_offset(ui.ctx()), 0.0));
     let mut img_rect = animated_rect(ui.ctx(), &mut app.ui.zoom_anim, target_rect);
@@ -799,6 +803,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         ui.separator();
         super::grid::context_menu(app, ui, id);
     });
+    if mobile_mask {
+        super::masking::mobile_rail(app, ui.ctx(), canvas, id);
+    }
 }
 
 /// The info overlay at the canvas' top left (`view.infoOverlay`): file name with the capture date

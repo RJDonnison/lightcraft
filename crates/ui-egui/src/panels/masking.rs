@@ -122,17 +122,12 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let t = Tokens::get(ui.ctx());
     let d = app.session.develop_of(id).unwrap_or_default();
     let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
-    header(ui, "Masking");
-    let create_key = egui::Id::new(("mobile-mask-create", id));
-    let mut creating = ui.ctx().data(|data| data.get_temp::<bool>(create_key)).unwrap_or(false);
-    if mobile && !d.masks.is_empty() {
-        let button = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(crate::i18n::tr("Create New Mask")));
-        register(ui.ctx(), "button:mobileMaskCreate", button.rect);
-        if button.clicked() {
-            creating = !creating;
-            ui.ctx().data_mut(|data| data.insert_temp(create_key, creating));
-        }
+    if !mobile {
+        header(ui, "Masking");
     }
+    let create_key = egui::Id::new(("mobile-mask-create", id));
+    let creating = ui.ctx().data(|data| data.get_temp::<bool>(create_key)).unwrap_or(false);
+    // The photo-side rail owns the add entry on a touch phone.
     if !mobile || d.masks.is_empty() || creating {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 0, bottom: 10 }).show(ui, |ui| {
             ui.label(egui::RichText::new(crate::i18n::tr("Create New Mask")).color(t.text_dim));
@@ -220,106 +215,109 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     }
     // mask list
     // (the mask rows run wider than the panel's 24 / 22 pt margins; the header keeps them)
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 16, right: 16, top: 8, bottom: 8 }).show(ui, |ui| {
-        egui::Frame::NONE.inner_margin(egui::Margin { left: 8, right: 6, top: 0, bottom: 0 }).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(crate::i18n::tr("Masks")).font(t.semibold(13.0)).color(t.text_label));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let on = app.ui.mask_overlay;
-                    if icon_button(ui, "maskOverlay", Icon::Eye, vec2(24.0, 24.0), on, true, "Show overlay (O)").clicked() {
-                        app.ui.mask_overlay = !on;
-                    }
-                });
-            })
-        });
-        if d.masks.is_empty() {
-            ui.label(egui::RichText::new(crate::i18n::tr("No masks yet. Choose a mask type above.")).color(t.text_dim));
-        }
-        let count = d.masks.len();
-        for (index, m) in d.masks.iter().enumerate() {
-            let sel = app.session.active_mask == Some(m.id);
-            if let Some((rid, name)) = app.ui.renaming_mask.as_mut().filter(|(rid, _)| *rid == m.id) {
-                // inline rename: Enter (or leaving the field) commits, Escape cancels
-                let rid = *rid;
-                let r = ui.add(egui::TextEdit::singleline(name).desired_width(ui.available_width()).id_salt(("maskRename", rid)));
-                register(ui.ctx(), format!("maskRename:{rid}"), r.rect);
-                if !r.has_focus() && !r.lost_focus() {
-                    r.request_focus();
-                }
-                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                    app.ui.renaming_mask = None;
-                } else if r.lost_focus() {
-                    let name = name.trim().to_string();
-                    app.ui.renaming_mask = None;
-                    if !name.is_empty() && name != m.name {
-                        let _ = app.run("mask.rename", json!({"id": rid, "name": name}));
-                    }
-                }
-                continue;
-            }
-            let row_height = if mobile { 44.0 } else { 30.0 };
-            let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_height), Sense::click());
-            register(ui.ctx(), format!("mask:{}", m.id), r);
-            ui.painter().rect_filled(
-                r,
-                4.0,
-                if sel {
-                    t.tool_active
-                } else if resp.hovered() {
-                    t.hover.gamma_multiply(0.7)
-                } else {
-                    t.chrome
-                },
-            );
-            let icon = m.components.first().map(|c| kind_label(&c.shape).1).unwrap_or(Icon::Mask);
-            paint(ui.painter(), Rect::from_min_size(pos2(r.left() + 8.0, r.center().y - 8.0), vec2(16.0, 16.0)), icon, t.text_label);
-            // a long name is cut short (with …) before the eye, the full name on hover
-            let color = if m.visible { t.text } else { t.text_disabled };
-            let g = one_line(ui.painter(), &m.name, t.font(13.0), color, r.width() - 32.0 - 32.0);
-            let elided = g.elided;
-            let at = pos2(r.left() + 32.0, r.center().y - g.size().y / 2.0);
-            register(ui.ctx(), format!("maskName:{}", m.id), Rect::from_min_size(at, g.size()));
-            ui.painter().galley(at, g, color);
-            let resp = if elided { resp.on_hover_text(&m.name) } else { resp };
-            // show / hide on hover (and always while hidden, or on a touch screen)
-            // (the pointer test, not `hovered`: over the eye, the row itself no longer counts as hovered)
-            if ui.rect_contains_pointer(r) || !m.visible || crate::widgets::touch_screen(ui.ctx()) {
-                let er = Rect::from_center_size(pos2(r.right() - 16.0, r.center().y), vec2(22.0, 22.0));
-                register(ui.ctx(), format!("maskVisible:{}", m.id), er);
-                let eye = ui.interact(er, egui::Id::new(("maskVisible", m.id)), Sense::click());
-                paint(
-                    ui.painter(),
-                    er.shrink(3.0),
-                    if m.visible { Icon::Eye } else { Icon::EyeOff },
-                    if eye.hovered() { t.text } else { t.text_dim },
-                );
-                if eye.clicked() {
-                    let _ = app.run("mask.visible", json!({"id": m.id}));
-                }
-            }
-            if resp.clicked() {
-                let _ = app.run("mask.select", json!({"id": m.id}));
-            }
-            if crate::widgets::double_clicked(ui, &resp) {
-                app.ui.renaming_mask = Some((m.id, m.name.clone()));
-            }
-            resp.context_menu(|ui| mask_menu(app, ui, m.id, &m.name, m.visible, index, count));
-            if sel {
-                // right under the selected mask: ＋ adds to it, − takes away from it (any mask
-                // type; Describe… opens its field here)
+    if !mobile {
+        egui::Frame::NONE.inner_margin(egui::Margin { left: 16, right: 16, top: 8, bottom: 8 }).show(ui, |ui| {
+            egui::Frame::NONE.inner_margin(egui::Margin { left: 8, right: 6, top: 0, bottom: 0 }).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    // under the mask's name
-                    ui.add_space(32.0);
-                    let plus = text_button(ui, &format!("maskPlus:{}", m.id), "+", false).on_hover_text(crate::i18n::tr("Add to this mask"));
-                    egui::Popup::menu(&plus).show(|ui| component_menu(app, ui, "add"));
-                    let minus = text_button(ui, &format!("maskMinus:{}", m.id), "−", false).on_hover_text(crate::i18n::tr("Subtract from this mask"));
-                    egui::Popup::menu(&minus).show(|ui| component_menu(app, ui, "subtract"));
-                });
-                describe_field(app, ui, false);
+                    ui.label(egui::RichText::new(crate::i18n::tr("Masks")).font(t.semibold(13.0)).color(t.text_label));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let on = app.ui.mask_overlay;
+                        if icon_button(ui, "maskOverlay", Icon::Eye, vec2(24.0, 24.0), on, true, "Show overlay (O)").clicked() {
+                            app.ui.mask_overlay = !on;
+                        }
+                    });
+                })
+            });
+            if d.masks.is_empty() {
+                ui.label(egui::RichText::new(crate::i18n::tr("No masks yet. Choose a mask type above.")).color(t.text_dim));
             }
-        }
-    });
-    if !d.masks.is_empty() {
+            let count = d.masks.len();
+            for (index, m) in d.masks.iter().enumerate() {
+                let sel = app.session.active_mask == Some(m.id);
+                if let Some((rid, name)) = app.ui.renaming_mask.as_mut().filter(|(rid, _)| *rid == m.id) {
+                    // inline rename: Enter (or leaving the field) commits, Escape cancels
+                    let rid = *rid;
+                    let r = ui.add(egui::TextEdit::singleline(name).desired_width(ui.available_width()).id_salt(("maskRename", rid)));
+                    register(ui.ctx(), format!("maskRename:{rid}"), r.rect);
+                    if !r.has_focus() && !r.lost_focus() {
+                        r.request_focus();
+                    }
+                    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        app.ui.renaming_mask = None;
+                    } else if r.lost_focus() {
+                        let name = name.trim().to_string();
+                        app.ui.renaming_mask = None;
+                        if !name.is_empty() && name != m.name {
+                            let _ = app.run("mask.rename", json!({"id": rid, "name": name}));
+                        }
+                    }
+                    continue;
+                }
+                let row_height = if mobile { 44.0 } else { 30.0 };
+                let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_height), Sense::click());
+                register(ui.ctx(), format!("mask:{}", m.id), r);
+                ui.painter().rect_filled(
+                    r,
+                    4.0,
+                    if sel {
+                        t.tool_active
+                    } else if resp.hovered() {
+                        t.hover.gamma_multiply(0.7)
+                    } else {
+                        t.chrome
+                    },
+                );
+                let icon = m.components.first().map(|c| kind_label(&c.shape).1).unwrap_or(Icon::Mask);
+                paint(ui.painter(), Rect::from_min_size(pos2(r.left() + 8.0, r.center().y - 8.0), vec2(16.0, 16.0)), icon, t.text_label);
+                // a long name is cut short (with …) before the eye, the full name on hover
+                let color = if m.visible { t.text } else { t.text_disabled };
+                let g = one_line(ui.painter(), &m.name, t.font(13.0), color, r.width() - 32.0 - 32.0);
+                let elided = g.elided;
+                let at = pos2(r.left() + 32.0, r.center().y - g.size().y / 2.0);
+                register(ui.ctx(), format!("maskName:{}", m.id), Rect::from_min_size(at, g.size()));
+                ui.painter().galley(at, g, color);
+                let resp = if elided { resp.on_hover_text(&m.name) } else { resp };
+                // show / hide on hover (and always while hidden, or on a touch screen)
+                // (the pointer test, not `hovered`: over the eye, the row itself no longer counts as hovered)
+                if ui.rect_contains_pointer(r) || !m.visible || crate::widgets::touch_screen(ui.ctx()) {
+                    let er = Rect::from_center_size(pos2(r.right() - 16.0, r.center().y), vec2(22.0, 22.0));
+                    register(ui.ctx(), format!("maskVisible:{}", m.id), er);
+                    let eye = ui.interact(er, egui::Id::new(("maskVisible", m.id)), Sense::click());
+                    paint(
+                        ui.painter(),
+                        er.shrink(3.0),
+                        if m.visible { Icon::Eye } else { Icon::EyeOff },
+                        if eye.hovered() { t.text } else { t.text_dim },
+                    );
+                    if eye.clicked() {
+                        let _ = app.run("mask.visible", json!({"id": m.id}));
+                    }
+                }
+                if resp.clicked() {
+                    let _ = app.run("mask.select", json!({"id": m.id}));
+                }
+                if crate::widgets::double_clicked(ui, &resp) {
+                    app.ui.renaming_mask = Some((m.id, m.name.clone()));
+                }
+                resp.context_menu(|ui| mask_menu(app, ui, m.id, &m.name, m.visible, index, count));
+                if sel {
+                    // right under the selected mask: ＋ adds to it, − takes away from it (any mask
+                    // type; Describe… opens its field here)
+                    ui.horizontal(|ui| {
+                        // under the mask's name
+                        ui.add_space(32.0);
+                        let plus = text_button(ui, &format!("maskPlus:{}", m.id), "+", false).on_hover_text(crate::i18n::tr("Add to this mask"));
+                        egui::Popup::menu(&plus).show(|ui| component_menu(app, ui, "add"));
+                        let minus =
+                            text_button(ui, &format!("maskMinus:{}", m.id), "−", false).on_hover_text(crate::i18n::tr("Subtract from this mask"));
+                        egui::Popup::menu(&minus).show(|ui| component_menu(app, ui, "subtract"));
+                    });
+                    describe_field(app, ui, false);
+                }
+            }
+        });
+    }
+    if !mobile && !d.masks.is_empty() {
         overlay_options(app, ui);
     }
     let Some(mid) = app.session.active_mask else { return };
@@ -475,6 +473,66 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     }
     ui.add_space(30.0);
     let _ = Stroke::NONE;
+}
+
+/// The touch editor keeps mask selection next to the image, independent of the adjustment sheet.
+pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, id: PhotoId) {
+    let t = Tokens::get(ctx);
+    let Some(d) = app.session.develop_of(id) else { return };
+    let left = canvas.right() - 58.0;
+    let height = (canvas.height() - 12.0).max(0.0);
+    egui::Area::new(egui::Id::new("mobile-mask-rail")).order(egui::Order::Foreground).fixed_pos(pos2(left, canvas.top() + 6.0)).show(ctx, |ui| {
+        egui::Frame::NONE.fill(t.chrome).corner_radius(8.0).inner_margin(4.0).show(ui, |ui| {
+            ui.set_width(48.0);
+            let create_key = egui::Id::new(("mobile-mask-create", id));
+            let creating = ctx.data(|data| data.get_temp::<bool>(create_key)).unwrap_or(false);
+            let add = icon_button(ui, "mobileMaskRail:add", Icon::Plus, vec2(48.0, 44.0), creating, true, "Create New Mask");
+            register(ctx, "mobileMaskRail:add", add.rect);
+            if add.clicked() {
+                ctx.data_mut(|data| data.insert_temp(create_key, !creating));
+            }
+            ui.separator();
+            egui::ScrollArea::vertical().id_salt("mobile-mask-rail-list").max_height((height - 155.0).max(44.0)).show(ui, |ui| {
+                for (index, m) in d.masks.iter().enumerate() {
+                    let icon = m.components.first().map(|c| kind_label(&c.shape).1).unwrap_or(Icon::Mask);
+                    let selected = app.session.active_mask == Some(m.id);
+                    let (rect, response) = ui.allocate_exact_size(vec2(48.0, 48.0), Sense::click());
+                    register(ctx, format!("mask:{}", m.id), rect);
+                    ui.painter().rect_filled(rect.shrink(2.0), 5.0, if selected { t.tool_active } else { t.inset });
+                    paint(
+                        ui.painter(),
+                        Rect::from_center_size(rect.center(), vec2(25.0, 25.0)),
+                        icon,
+                        if m.visible { t.text } else { t.text_disabled },
+                    );
+                    let response = response.on_hover_text(&m.name);
+                    response.context_menu(|ui| mask_menu(app, ui, m.id, &m.name, m.visible, index, d.masks.len()));
+                    if response.clicked() {
+                        let _ = app.run("mask.select", json!({"id": m.id}));
+                        ctx.data_mut(|data| data.insert_temp(create_key, false));
+                    }
+                }
+            });
+            if let Some(m) = d.masks.iter().find(|m| Some(m.id) == app.session.active_mask) {
+                let visible = icon_button(
+                    ui,
+                    "mobileMaskRail:visible",
+                    if m.visible { Icon::Eye } else { Icon::EyeOff },
+                    vec2(48.0, 44.0),
+                    m.visible,
+                    true,
+                    "Show or hide selected mask",
+                );
+                register(ctx, "mobileMaskRail:visible", visible.rect);
+                if visible.clicked() {
+                    let _ = app.run("mask.visible", json!({"id": m.id}));
+                }
+            }
+            let overlay = icon_button(ui, "mobileMaskRail:overlay", Icon::Mask, vec2(48.0, 44.0), app.ui.mask_overlay, true, "Mask overlay options");
+            register(ctx, "mobileMaskRail:overlay", overlay.rect);
+            egui::Popup::menu(&overlay).show(|ui| overlay_options(app, ui));
+        });
+    });
 }
 
 /// The right-click menu of a mask in the Masks list.

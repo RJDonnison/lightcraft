@@ -321,15 +321,38 @@ fn phone_editor_bar_opens_crop_masks_curve_and_grading() {
     assert!(widget(&h, "mobileMask:Color").is_none(), "adjustments appear after selecting a mask");
     h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
     h.settle(SETTLE);
-    assert!(widget(&h, "button:mobileMaskCreate").is_some(), "creation collapses above existing masks");
+    assert!(widget(&h, "mobileMaskRail:add").is_some(), "mask creation belongs beside the photo");
+    assert!(widget(&h, "mobileMaskRail:overlay").is_some(), "overlay controls belong beside the photo");
+    assert!(widget(&h, "mobileMaskRail:visible").is_some(), "selected mask visibility is reachable");
+    assert!(widget(&h, "button:mobileMaskCreate").is_none(), "mask list is no longer in the adjustment sheet");
     assert!(widget(&h, "mobileMask:Color").is_some(), "local adjustments have categories");
-    h.input([egui::Event::PointerMoved(egui::pos2(250.0, 680.0))]);
-    h.step();
-    h.request("ui.scroll", json!({"dy": -450.0}), Duration::from_secs(20));
-    h.step();
     click(&mut h, "mobileMask:Color");
     assert!(widget(&h, "slider:hue").is_some(), "Color exposes its local adjustment sliders");
     assert!(widget(&h, "slider:exposure").is_none(), "Light sliders are outside the chosen category");
+}
+
+#[test]
+fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    h.app.run("panel.masking", json!({})).unwrap();
+    h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
+    h.app.run("mask.add", json!({"kind": "radial"})).unwrap();
+    h.settle(SETTLE);
+    let id = h.app.session.active().expect("active photo");
+    let masks = h.app.session.develop_of(id).expect("develop settings").masks.clone();
+    assert_eq!(masks.len(), 2);
+    for mask in &masks {
+        assert!(widget(&h, &format!("mask:{}", mask.id)).is_some(), "mask tile in photo rail");
+    }
+    assert!(widget(&h, "mobileMask:Light").is_some(), "adjustments remain in the sheet");
+    let r = h.request("ui.clickWidget", json!({"id": format!("mask:{}", masks[0].id)}), Duration::from_secs(20));
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert_eq!(h.app.session.active_mask, Some(masks[0].id));
+    let r = h.request("ui.clickWidget", json!({"id": "mobileMaskRail:add"}), Duration::from_secs(20));
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert!(widget(&h, "maskNew:linear").is_some(), "rail opens creation choices in the sheet");
 }
 
 #[test]

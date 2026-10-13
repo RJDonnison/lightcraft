@@ -8,6 +8,8 @@
 {"method":"ui.screenshot"}
 {"method":"ui.clickWidget","params":{"id":"icon:masking"}}
 {"method":"ui.screenshot"}
+{"method":"engine.execute","params":{"command":"mask.add","params":{"kind":"linear","start":[0.5,0.1],"end":[0.5,0.7]}}}
+{"method":"ui.screenshot"}
 {"method":"ui.clickWidget","params":{"id":"icon:crop"}}
 {"method":"ui.screenshot"}
 {"method":"ui.clickWidget","params":{"id":"icon:presets"}}

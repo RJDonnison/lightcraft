@@ -41,12 +41,14 @@ orientation, iPad Split View and phone browsers:
 
 - **Top bar:** My Photos, Back, Menu, a search field, Filter and Export in the grid; Back,
   Edit Photo and Export while editing on a touch screen.
-- **Detail view:** the photo on top, with a persistent touch tool bar (Edit, Crop, Masking,
-  Remove, Presets) and a bottom sheet showing the chosen tool. The sheet's Hide button puts
-  its controls away. Edit has horizontally scrollable Light, Curve, Color, Color Grading,
-  Effects, Detail, Optics and Calibration categories; Curve and Grading use their existing
-  editors. Crop presents common aspect ratios above its other controls. Masking puts existing
-  masks first, with a Create New Mask button and Light/Color/Effects/Detail adjustment categories.
+- **Detail view:** the photo on top, with a persistent touch tool bar (Presets, Edit, Crop,
+  Remove, Masking, More) and a bottom sheet showing the chosen tool. More opens the other
+  panels; tapping the active tool or the photo dismisses the sheet. The sheet handle toggles
+  between two heights. Edit has Light, Color, Effects, Detail, Optics and Calibration categories,
+  with Curve under Light and Grading under Color. Crop presents common aspect ratios above its
+  other controls. Masking puts mask selection, creation, visibility and overlay controls beside
+  the photo, with only the selected mask's components and Light/Color/Effects/Detail adjustments
+  in the sheet.
   On non-touch compact windows the tools remain inside the sheet. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.
