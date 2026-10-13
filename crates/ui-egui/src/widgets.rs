@@ -339,7 +339,16 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
     if resp.drag_stopped() || !(resp.dragged() || resp.drag_started()) {
         ui.ctx().data_mut(|d| d.remove::<TouchDrag>(touch_id));
     }
-    let track_double = double_clicked(ui, &resp);
+    let edge_tap = (touch && resp.clicked() && enabled)
+        .then(|| resp.interact_pointer_pos().and_then(|pos| mobile_edge_tap_value(spec, value, pos.x, track_rect)))
+        .flatten();
+    let track_double = if edge_tap.is_some() {
+        // An edge nudge must not count as the first tap of a middle reset.
+        ui.ctx().data_mut(|d| d.remove::<(egui::Id, f64)>(egui::Id::new("lc-last-tap")));
+        false
+    } else {
+        double_clicked(ui, &resp)
+    };
     let label_double = double_clicked(ui, &label_resp);
     if let Some((mut text, frames, pressed)) = typing.take() {
         // Keep the owned opening release focused without restarting its draft or selection.
@@ -381,18 +390,9 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
             let delta = ui.input(|i| i.pointer.delta());
             ui.scroll_with_delta_animation(vec2(0.0, delta.y), egui::style::ScrollAnimation::none());
         }
-    } else if track_double || label_double {
-        let next = if touch && track_double {
-            resp.interact_pointer_pos().map_or(spec.default, |pos| mobile_double_tap_value(spec, value, pos.x, track_rect))
-        } else {
-            spec.default
-        };
-        out.reset = !touch
-            || label_double
-            || resp.interact_pointer_pos().is_none_or(|pos| {
-                let edge = track_rect.width() * 0.2;
-                pos.x >= track_rect.left() + edge && pos.x <= track_rect.right() - edge
-            });
+    } else if edge_tap.is_some() || track_double || label_double {
+        let next = edge_tap.unwrap_or(spec.default);
+        out.reset = edge_tap.is_none();
         out.value = Some(next);
         out.drag_started = true;
         out.drag_stopped = true;
@@ -509,17 +509,17 @@ pub fn slider_padded(ui: &mut Ui, spec: &ControlSpec, value: f64, enabled: bool,
     out
 }
 
-/// The outer fifth of a phone track nudges by exactly one configured control step;
-/// the central area retains double-tap reset.
-fn mobile_double_tap_value(spec: &ControlSpec, value: f64, x: f32, track: Rect) -> f64 {
+/// A single tap on either outer fifth nudges by exactly one configured control step.
+/// The central area remains inert until a double-tap resets it.
+fn mobile_edge_tap_value(spec: &ControlSpec, value: f64, x: f32, track: Rect) -> Option<f64> {
     let edge = track.width() * 0.2;
     let step = spec.step.max(1e-9);
     if x < track.left() + edge {
-        (value - step).clamp(spec.min, spec.max)
+        Some((value - step).clamp(spec.min, spec.max))
     } else if x > track.right() - edge {
-        (value + step).clamp(spec.min, spec.max)
+        Some((value + step).clamp(spec.min, spec.max))
     } else {
-        spec.default
+        None
     }
 }
 

@@ -458,6 +458,14 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let interaction =
         if mobile_mask { Rect::from_min_max(canvas.min, pos2((canvas.right() - 60.0).max(canvas.left()), canvas.bottom())) } else { canvas };
     let resp = ui.interact(interaction, egui::Id::new("loupe"), Sense::click_and_drag());
+    let phone_hold = compact && crate::widgets::touch_screen(ui.ctx()) && !fullscreen;
+    let (held_original, released_original) =
+        if phone_hold && !matches!(right, RightPanel::Crop | RightPanel::Masking | RightPanel::Remove | RightPanel::RedEye) {
+            touch_original_hold(ui, &resp)
+        } else {
+            ui.ctx().data_mut(|d| d.remove::<OriginalHold>(egui::Id::new("mobile-original-hold")));
+            (false, false)
+        };
     // a touch swipe to the next / previous photo drags the photo along
     let mut target_rect = fit_rect(main_area, display_aspect, app.ui.zoom, native, ppp, app.ui.pan).translate(vec2(swipe_offset(ui.ctx()), 0.0));
     let mut img_rect = animated_rect(ui.ctx(), &mut app.ui.zoom_anim, target_rect);
@@ -551,7 +559,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     {
         app.renderer.request_quick(Slot::Preview, q, 110);
     }
-    let show_before = app.ui.before_after == BeforeAfter::Original || ui.input(|i| i.key_down(egui::Key::Backslash));
+    let show_before = held_original || app.ui.before_after == BeforeAfter::Original || ui.input(|i| i.key_down(egui::Key::Backslash));
     if (split || show_before || split_view)
         && let Some(job) = app.session.render_job(id, sw.max(8), sh.max(8), true, !crop_tool)
     {
@@ -716,6 +724,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         clipping_overlay(app, &p, img_rect);
     }
     register(ui.ctx(), "canvas:image", img_rect);
+    if held_original {
+        register(ui.ctx(), "mobileOriginal:held", img_rect);
+    }
     let map = CanvasMap::new(&frame, img_rect);
     let phone_histogram = compact && crate::widgets::touch_screen(ui.ctx()) && !fullscreen;
     info_overlay(app, &p, canvas, &photo, if phone_histogram { if app.ui.mobile_histogram { 108.0 } else { 48.0 } } else { 0.0 });
@@ -767,7 +778,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     if !matches!(right, RightPanel::Crop | RightPanel::Masking | RightPanel::Remove | RightPanel::RedEye) {
         general_cursor(app, ui, &resp, img_rect, main_area);
     }
-    if !navigating {
+    if !navigating && !released_original {
         match right {
             RightPanel::Crop => crop_overlay(app, ui, &resp, &map, &frame, &d, id),
             RightPanel::Masking => mask_overlay(app, ui, &resp, &map, &d),
@@ -793,23 +804,57 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     if let Some(why) = photo.preview_only.as_deref().filter(|_| !fullscreen) {
         preview_only_pill(ui, canvas, why);
     }
-    resp.context_menu(|ui| {
-        ui.menu_button(crate::i18n::tr("Zoom"), |ui| {
-            for (label, cmd) in [("Fit", "view.zoomFit"), ("100%", "view.zoom100"), ("Zoom In", "view.zoomIn"), ("Zoom Out", "view.zoomOut")] {
-                if ui.button(label).clicked() {
-                    let _ = app.run(cmd, json!({}));
+    if !phone_hold {
+        resp.context_menu(|ui| {
+            ui.menu_button(crate::i18n::tr("Zoom"), |ui| {
+                for (label, cmd) in [("Fit", "view.zoomFit"), ("100%", "view.zoom100"), ("Zoom In", "view.zoomIn"), ("Zoom Out", "view.zoomOut")] {
+                    if ui.button(label).clicked() {
+                        let _ = app.run(cmd, json!({}));
+                    }
                 }
-            }
+            });
+            ui.separator();
+            super::grid::context_menu(app, ui, id);
         });
-        ui.separator();
-        super::grid::context_menu(app, ui, id);
-    });
+    }
     if mobile_mask {
         super::masking::mobile_rail(app, ui.ctx(), canvas, id);
     }
     if phone_histogram {
         mobile_histogram(app, ui.ctx(), canvas, id);
     }
+}
+
+#[derive(Clone, Copy)]
+struct OriginalHold {
+    started: f64,
+    origin: egui::Pos2,
+    cancelled: bool,
+    shown: bool,
+}
+
+/// A stationary phone press previews the original only while held. Movement cancels the hold so
+/// image swipes/pans still work; a released preview cannot also dismiss the editor sheet.
+fn touch_original_hold(ui: &egui::Ui, resp: &egui::Response) -> (bool, bool) {
+    let key = egui::Id::new("mobile-original-hold");
+    let now = ui.input(|i| i.time);
+    let pressed = ui.input(|i| i.pointer.primary_down() && i.any_touches()) && resp.is_pointer_button_down_on();
+    let old = ui.ctx().data(|d| d.get_temp::<OriginalHold>(key));
+    if !pressed {
+        ui.ctx().data_mut(|d| d.remove::<OriginalHold>(key));
+        return (false, old.is_some_and(|h| h.shown));
+    }
+    let Some(pos) = resp.interact_pointer_pos() else { return (false, false) };
+    let mut hold = old.unwrap_or(OriginalHold { started: now, origin: pos, cancelled: false, shown: false });
+    if pos.distance(hold.origin) > 12.0 {
+        hold.cancelled = true;
+    }
+    hold.shown = !hold.cancelled && now - hold.started >= 0.55;
+    if !hold.cancelled && !hold.shown {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(key, hold));
+    (hold.shown, false)
 }
 
 /// An independent phone preference: the desktop Edit histogram remains where it was.

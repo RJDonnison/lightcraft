@@ -80,6 +80,31 @@ fn phone_histogram_toggles_on_photo_without_changing_desktop_preference() {
 }
 
 #[test]
+fn photo_long_press_temporarily_shows_original_without_opening_menu_or_closing_sheet() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    let pos = widget(&h, "canvas:image").expect("photo").center();
+    let id = egui::TouchId(41);
+    h.input([
+        egui::Event::Touch { device_id: egui::TouchDeviceId(1), id, phase: egui::TouchPhase::Start, pos, force: None },
+        egui::Event::PointerMoved(pos),
+        egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() },
+    ]);
+    for _ in 0..42 {
+        h.step();
+    }
+    assert!(widget(&h, "mobileOriginal:held").is_some(), "held photo previews the original");
+    assert!(widget(&h, "panel:sheet").is_some());
+    h.input([
+        egui::Event::Touch { device_id: egui::TouchDeviceId(1), id, phase: egui::TouchPhase::End, pos, force: None },
+        egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() },
+    ]);
+    h.step();
+    assert!(widget(&h, "mobileOriginal:held").is_none(), "release restores edits");
+    assert!(widget(&h, "panel:sheet").is_some(), "release doesn't dismiss the editor");
+    assert_eq!(h.app.ui.before_after, crate::state::BeforeAfter::Off);
+}
+
+#[test]
 fn phone_export_uses_small_chooser_and_mobile_publisher() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};

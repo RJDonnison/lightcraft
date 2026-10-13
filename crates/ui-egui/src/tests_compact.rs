@@ -241,18 +241,18 @@ fn touch_swipe_sideways_on_a_slider_adjusts_it_by_the_distance() {
 }
 
 #[test]
-fn touch_tap_on_a_slider_leaves_the_value() {
+fn touch_tap_in_middle_of_slider_leaves_the_value() {
     let mut h = demo(PHONE, json!({"view": "detail", "right": "edit"}));
     let before = exposure(&h);
     touch_screen(&mut h);
     let track = exposure_in_view(&mut h);
-    let at = egui::pos2(track.left() + 10.0, track.center().y);
+    let at = track.center();
     touch_drag(&mut h, at, at, 0);
     assert_eq!(exposure(&h), before);
 }
 
 #[test]
-fn phone_slider_readout_is_not_editable_and_edge_double_taps_step() {
+fn phone_slider_readout_is_not_editable_and_single_edge_taps_step() {
     let mut h = demo(PHONE, json!({"view": "detail", "right": "edit"}));
     touch_screen(&mut h);
     exposure_in_view(&mut h);
@@ -264,16 +264,17 @@ fn phone_slider_readout_is_not_editable_and_edge_double_taps_step() {
     let start = exposure(&h);
     let left = egui::pos2(track.left() + 4.0, track.center().y);
     touch_tap(&mut h, left);
-    touch_tap(&mut h, left);
     assert!((exposure(&h) - (start - spec.step)).abs() < 1e-9, "one step left: start {start}, step {}, got {}", spec.step, exposure(&h));
+    touch_tap(&mut h, left);
+    assert!((exposure(&h) - (start - 2.0 * spec.step)).abs() < 1e-9, "two taps nudge twice");
     let right = egui::pos2(track.right() - 4.0, track.center().y);
     touch_tap(&mut h, right);
-    touch_tap(&mut h, right);
-    assert!((exposure(&h) - start).abs() < 1e-9, "one step right");
+    assert!((exposure(&h) - (start - spec.step)).abs() < 1e-9, "one step right");
     let middle = track.center();
     touch_tap(&mut h, left);
-    touch_tap(&mut h, left);
+    assert!((exposure(&h) - (start - 2.0 * spec.step)).abs() < 1e-9);
     touch_tap(&mut h, middle);
+    assert!((exposure(&h) - (start - 2.0 * spec.step)).abs() < 1e-9, "middle single tap is inert");
     touch_tap(&mut h, middle);
     assert!((exposure(&h) - spec.default).abs() < 1e-9, "middle resets");
 }

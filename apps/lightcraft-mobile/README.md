@@ -77,12 +77,14 @@ orientation, iPad Split View and phone browsers:
 - **Loupe gestures:** pinch zooms about the fingers, from Fit to 1600%, and pinching back in
   snaps to Fit. Moving both fingers pans. At Fit, a one-finger swipe sideways drags the photo
   along, and letting go past a sixth of the screen shows the next or previous photo. When
-  zoomed in, one finger pans as before. A trackpad pinch (or ⌘/Ctrl-scroll) over the loupe
+  zoomed in, one finger pans as before. Hold a finger still on the photo to preview the original;
+  lift it to restore the edit. Crop, Masking and Remove still use their own touch gestures.
+  A trackpad pinch (or ⌘/Ctrl-scroll) over the loupe
   zooms on the desktop too.
 - **Sliders by touch:** a drag that starts sideways adjusts the slider by the distance moved;
-  one that starts up or down scrolls the panel, even when it begins on a slider's track. A tap
-  doesn't change the value. Double-tap the left or right end to change by one step, or the middle
-  to reset. Compact touch sliders have larger thumbs and display-only readouts. Curve channels and
+  one that starts up or down scrolls the panel, even when it begins on a slider's track. A single
+  tap on either track edge changes by one step; a middle tap does nothing, and a middle double-tap
+  resets. Compact touch sliders have larger thumbs and display-only readouts. Curve channels and
   points have larger touch targets; a vertical drag starting away from a point scrolls the sheet.
   Mouse and trackpad retain their desktop behavior, including exact-value entry.
 - **Presets and profiles:** phone Presets show thumbnail previews rendered from the active photo
