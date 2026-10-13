@@ -716,6 +716,28 @@ fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
 }
 
 #[test]
+fn phone_remove_marks_target_and_source_for_touch_selection() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    h.app.run("panel.remove", json!({})).unwrap();
+    for point in [[0.3, 0.4], [0.7, 0.6]] {
+        h.app.run("spot.add", json!({"mode": "clone", "points": [point], "size": 0.025, "feather": 50.0, "opacity": 100.0})).unwrap();
+    }
+    h.app.run("spot.select", json!({"index": 0})).unwrap();
+    h.settle(SETTLE);
+    let target = widget(&h, "spotPin:0").expect("selected correction target");
+    let source = widget(&h, "spotSource:0").expect("selected correction source");
+    assert!(target.width() >= 44.0 && target.height() >= 44.0);
+    assert!(source.width() >= 44.0 && source.height() >= 44.0);
+    let other = widget(&h, "spotPin:1").expect("other correction target");
+    assert!(other.width() >= 44.0 && other.height() >= 44.0);
+    let result = h.request("ui.clickWidget", json!({"id": "spotPin:1"}), Duration::from_secs(20));
+    assert_eq!(result["ok"], true, "{result}");
+    h.step();
+    assert_eq!(h.app.session.active_spot, Some(1));
+    assert_eq!(h.app.session.develop_of(h.app.session.active().expect("photo")).expect("develop").spots.len(), 2);
+}
+
+#[test]
 fn small_phone_editor_tools_fit_and_more_opens_secondary_panels() {
     let mut h = touch_app(ViewMode::Detail, [360.0, 740.0]);
     let click = |h: &mut Headless, id: &str| {

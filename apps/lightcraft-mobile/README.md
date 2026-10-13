@@ -52,7 +52,9 @@ orientation, iPad Split View and phone browsers:
    or drag inside the frame to move it; rotation uses the explicit controls. Masking puts
    effective white-on-black previews, creation, selection, visibility, overlay and component
    management beside the photo. The lower sheet shows only the selected mask's
-   Light/Color/Effects/Detail adjustments.
+   Light/Color/Effects/Detail adjustments. Remove marks the selected correction's target and
+   source separately on the photo, with finger-sized hit targets: tap to select, drag a marker to
+   move it, and paint away from markers to add a correction.
   On non-touch compact windows the tools remain inside the sheet. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.

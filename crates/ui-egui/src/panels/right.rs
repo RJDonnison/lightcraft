@@ -426,7 +426,10 @@ fn crop_geometry(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &lightcraft_deve
 
 fn remove(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let d = app.session.develop_of(id).unwrap_or_default();
-    header(ui, "Remove");
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
+    if !mobile {
+        header(ui, "Remove");
+    }
     padded(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
             for (label, tool) in [("Remove", "remove"), ("Content-Aware", "fill"), ("Heal", "heal"), ("Clone", "clone")] {
@@ -458,7 +461,14 @@ fn remove(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
             }
         }
         ui.add_space(4.0);
-        ui.label(egui::RichText::new(crate::i18n::tr("Paint over a distraction on the photo to remove it.")).color(Tokens::get(ui.ctx()).text_dim));
+        ui.label(
+            egui::RichText::new(crate::i18n::tr(if mobile {
+                "Paint elsewhere to remove. Tap a correction to select it; drag its target or source marker to move it."
+            } else {
+                "Paint over a distraction on the photo to remove it."
+            }))
+            .color(Tokens::get(ui.ctx()).text_dim),
+        );
     });
     // brush settings; with a spot selected they edit that spot too
     let sel = app.session.active_spot.and_then(|i| d.spots.get(i).map(|sp| (i, sp.clone())));

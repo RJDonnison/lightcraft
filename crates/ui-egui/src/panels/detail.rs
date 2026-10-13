@@ -2218,6 +2218,8 @@ fn pin(p: &egui::Painter, c: Pos2, sel: bool) {
 fn remove_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Response, map: &CanvasMap, d: &DevelopSettings) {
     let long = (map.rect.width().max(map.rect.height())) as f64;
     let p = ui.painter_at(app.canvas_rect.unwrap_or(map.rect));
+    let phone = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
+    let target = if phone { 44.0 } else { 14.0 };
     let active = app.session.active_spot.filter(|i| *i < d.spots.len());
     // (spot, is source, screen centre, radius) of everything that can be grabbed
     let mut grips: Vec<(usize, bool, Pos2, f32)> = Vec::new();
@@ -2237,11 +2239,33 @@ fn remove_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respo
             }
             let dir = (tq - sq).normalized();
             p.arrow(sq + dir * r, (tq - sq) - dir * (2.0 * r).min((tq - sq).length()), Stroke::new(1.0, Color32::from_white_alpha(200)));
-            register(ui.ctx(), format!("spotSource:{i}"), Rect::from_center_size(sq, vec2(14.0, 14.0)));
+            register(ui.ctx(), format!("spotSource:{i}"), Rect::from_center_size(sq, vec2(target, target)));
+            if phone {
+                p.circle_filled(sq, 10.0, Color32::from_black_alpha(190));
+                p.circle_stroke(sq, 10.0, Stroke::new(2.0, Color32::WHITE));
+                let below = sq.y >= tq.y;
+                p.text(
+                    sq + vec2(0.0, if below { 14.0 } else { -14.0 }),
+                    if below { Align2::CENTER_TOP } else { Align2::CENTER_BOTTOM },
+                    "SOURCE",
+                    Tokens::get(ui.ctx()).font(11.0),
+                    Color32::WHITE,
+                );
+            }
             grips.push((i, true, sq, r));
         }
         pin(&p, tq, sel);
-        register(ui.ctx(), format!("spotPin:{i}"), Rect::from_center_size(tq, vec2(14.0, 14.0)));
+        register(ui.ctx(), format!("spotPin:{i}"), Rect::from_center_size(tq, vec2(target, target)));
+        if phone && sel {
+            let below = s.source_offset.is_some_and(|o| map.screen(Point::new(t.x + o.x, t.y + o.y)).y < tq.y);
+            p.text(
+                tq + vec2(0.0, if below { 14.0 } else { -14.0 }),
+                if below { Align2::CENTER_TOP } else { Align2::CENTER_BOTTOM },
+                "TARGET",
+                Tokens::get(ui.ctx()).font(11.0),
+                Color32::WHITE,
+            );
+        }
         grips.push((i, false, tq, r));
     }
     let r = (app.ui.remove_size as f64 * long) as f32;
@@ -2249,7 +2273,7 @@ fn remove_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respo
     let hit = |q: Pos2| {
         grips
             .iter()
-            .filter(|g| g.2.distance(q) < g.3.max(8.0))
+            .filter(|g| g.2.distance(q) < g.3.max(if phone { 22.0 } else { 8.0 }))
             .min_by(|a, b| {
                 (Some(a.0) != active, a.2.distance(q)).partial_cmp(&(Some(b.0) != active, b.2.distance(q))).unwrap_or(std::cmp::Ordering::Equal)
             })
