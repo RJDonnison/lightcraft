@@ -1437,11 +1437,18 @@ fn crop_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respons
     }
     // handles: 0..3 corners, 4..7 edges (top, right, bottom, left)
     let handles: Vec<Pos2> = (0..8).map(|i| if i < 4 { pts[i] } else { lerp(pts[i - 4], pts[(i - 3) % 4], 0.5) }).collect();
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
     for (i, h) in handles.iter().enumerate() {
-        register(ui.ctx(), format!("cropHandle:{i}"), Rect::from_center_size(*h, vec2(14.0, 14.0)));
-        let s = if i < 4 { 12.0 } else { 9.0 };
-        p.rect_filled(Rect::from_center_size(*h, vec2(s, 3.0)), 0.0, Color32::WHITE);
-        p.rect_filled(Rect::from_center_size(*h, vec2(3.0, s)), 0.0, Color32::WHITE);
+        let target = if mobile { 44.0 } else { 14.0 };
+        register(ui.ctx(), format!("cropHandle:{i}"), Rect::from_center_size(*h, vec2(target, target)));
+        if mobile {
+            p.circle_filled(*h, if i < 4 { 9.0 } else { 7.0 }, Color32::from_black_alpha(160));
+            p.circle_stroke(*h, if i < 4 { 9.0 } else { 7.0 }, Stroke::new(2.0, Color32::WHITE));
+        } else {
+            let s = if i < 4 { 12.0 } else { 9.0 };
+            p.rect_filled(Rect::from_center_size(*h, vec2(s, 3.0)), 0.0, Color32::WHITE);
+            p.rect_filled(Rect::from_center_size(*h, vec2(3.0, s)), 0.0, Color32::WHITE);
+        }
     }
     let inside = |q: Pos2| {
         let n = map.norm(q);
@@ -1449,7 +1456,7 @@ fn crop_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respons
         d.crop.geometry.rect.contains(Point::new(s.x.clamp(-1.0, 2.0), s.y))
     };
     // the handle a press at `q` grabs: the nearest within reach (a finger's on a touch screen)
-    let reach = crate::widgets::grab_radius(ui.ctx(), 12.0);
+    let reach = if mobile { 22.0 } else { crate::widgets::grab_radius(ui.ctx(), 12.0) };
     let grab = |q: Pos2| {
         handles
             .iter()
@@ -1488,6 +1495,7 @@ fn crop_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respons
             Some(_) => egui::CursorIcon::Move,
             None if inside(hq) && !rotating => egui::CursorIcon::Move,
             // a drag here rotates: no system cursor shows that, so draw a curved double arrow
+            None if mobile => egui::CursorIcon::Default,
             None => {
                 rotate_cursor(ui, hq, rotate_cursor_turn(&pts, hq, inside(hq)));
                 egui::CursorIcon::None
@@ -1510,6 +1518,11 @@ fn crop_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respons
     if resp.drag_started()
         && let Some(q) = crate::widgets::press_pos(ui, resp)
     {
+        // Rotation on a phone is an explicit straighten/rotate control, never an accidental
+        // drag just outside a small crop frame.
+        if mobile && grab(q).is_none() && !inside(q) {
+            return;
+        }
         if let Err(e) = app.run("develop.beginInteraction", json!({"label": "Crop"})).and_then(|_| app.begin_crop().map(|_| serde_json::Value::Null))
         {
             app.ui.status = e;

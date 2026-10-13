@@ -652,6 +652,34 @@ fn phone_editor_bar_opens_crop_masks_curve_and_grading() {
 }
 
 #[test]
+fn phone_crop_uses_visual_aspects_separate_geometry_and_large_handles() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    h.app.run("panel.crop", json!({})).unwrap();
+    h.settle(SETTLE);
+    assert!(widget(&h, "mobileCropTab:Crop").is_some());
+    for aspect in ["free", "original", "1x1", "4x5", "16x9"] {
+        let rect = widget(&h, &format!("mobileCrop:{aspect}")).expect("visual aspect card");
+        assert!(rect.width() >= 70.0 && rect.height() >= 60.0);
+    }
+    let photo = h.app.session.active().expect("photo");
+    let corner = widget(&h, "cropHandle:0").expect("visible corner");
+    assert!(corner.width() >= 44.0 && corner.height() >= 44.0);
+    let r = h.request("ui.clickWidget", json!({"id": "mobileCropTab:Geometry"}), Duration::from_secs(20));
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert!(widget(&h, "mobileCropTab:Crop").is_some());
+    assert!(widget(&h, "mobileCrop:1x1").is_none(), "aspect cards belong only in Crop");
+    assert!(widget(&h, "slider:geometry.vertical").is_some() || widget(&h, "segmented:upright").is_some(), "Geometry tools are visible");
+    let r = h.request("ui.clickWidget", json!({"id": "mobileCropTab:Crop"}), Duration::from_secs(20));
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    let r = h.request("ui.clickWidget", json!({"id": "mobileCrop:1x1"}), Duration::from_secs(20));
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert_eq!(h.app.session.develop_of(photo).expect("develop").crop.aspect, Some((100, 100)));
+}
+
+#[test]
 fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     h.app.run("panel.masking", json!({})).unwrap();

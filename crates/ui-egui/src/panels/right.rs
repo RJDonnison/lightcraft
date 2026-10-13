@@ -32,7 +32,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             super::empty_message(ui, r, "No photo selected", "Select a photo to edit");
             return;
         };
-        let reset_edit_scroll = app.ui.right == RightPanel::Edit
+        let reset_edit_scroll = matches!(app.ui.right, RightPanel::Edit | RightPanel::Crop)
             && super::compact::is_compact(ui.ctx())
             && crate::widgets::touch_screen(ui.ctx())
             && ui.ctx().data_mut(|d| d.remove_temp::<bool>(egui::Id::new("mobile-edit-scroll-reset"))).is_some();
@@ -149,25 +149,79 @@ fn custom_aspect(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 
 fn crop(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let d = app.session.develop_of(id).unwrap_or_default();
-    header(ui, "Crop");
-    if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
-        ui.horizontal_wrapped(|ui| {
-            for (label, aspect) in [("Free", "free"), ("Original", "original"), ("1 × 1", "1x1"), ("4 × 5", "4x5"), ("16 × 9", "16x9")] {
-                let response = ui.add_sized([72.0, 40.0], egui::Button::new(crate::i18n::tr(label)));
-                crate::widgets::register(ui.ctx(), format!("mobileCrop:{aspect}"), response.rect);
-                if response.clicked() {
-                    let _ = app.run("crop.aspect", json!({"aspect": aspect}));
+    let original = app.session.catalog.photo(id).map(|p| {
+        let (w, h) = (p.width.max(1) as f64, p.height.max(1) as f64);
+        if d.orientation.swaps_axes() { h / w } else { w / h }
+    });
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
+    let geometry = mobile && ui.ctx().data(|data| data.get_temp::<bool>(egui::Id::new("mobile-crop-geometry"))).unwrap_or(false);
+    if mobile {
+        padded(ui, |ui| {
+            ui.horizontal(|ui| {
+                for (label, selected) in [("Crop", !geometry), ("Geometry", geometry)] {
+                    let r = ui.add_sized([100.0, 44.0], egui::Button::new(crate::i18n::tr(label)).selected(selected));
+                    register(ui.ctx(), format!("mobileCropTab:{label}"), r.rect);
+                    if r.clicked() {
+                        ui.ctx().data_mut(|data| data.insert_temp(egui::Id::new("mobile-crop-geometry"), label == "Geometry"));
+                        ui.ctx().data_mut(|data| data.insert_temp(egui::Id::new("mobile-edit-scroll-reset"), true));
+                    }
                 }
-            }
+            });
+        });
+    } else {
+        header(ui, "Crop");
+    }
+    if geometry {
+        crop_geometry(app, ui, &d, false);
+        return;
+    }
+    if mobile {
+        let current = aspect_label(app.crop_tool_aspect(), original);
+        padded(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = vec2(4.0, 6.0);
+                for (label, aspect, width, height) in [
+                    ("Free", "free", 32.0, 23.0),
+                    ("Original", "original", 32.0, 23.0),
+                    ("1 × 1", "1x1", 25.0, 25.0),
+                    ("4 × 5", "4x5", 22.0, 27.0),
+                    ("16 × 9", "16x9", 36.0, 20.0),
+                ] {
+                    let (rect, response) = ui.allocate_exact_size(vec2(80.0, 68.0), Sense::click());
+                    register(ui.ctx(), format!("mobileCrop:{aspect}"), rect);
+                    let t = Tokens::get(ui.ctx());
+                    let active = current == label || (aspect == "4x5" && current.starts_with("4 × 5"));
+                    ui.painter().rect_filled(rect, 5.0, if active { t.cell_selected } else { t.chrome });
+                    let outline = Rect::from_center_size(pos2(rect.center().x, rect.top() + 24.0), vec2(width, height));
+                    ui.painter().rect_stroke(
+                        outline,
+                        1.0,
+                        egui::Stroke::new(2.0, if active { t.text } else { t.text_dim }),
+                        egui::StrokeKind::Inside,
+                    );
+                    ui.painter().text(
+                        pos2(rect.center().x, rect.bottom() - 13.0),
+                        Align2::CENTER_CENTER,
+                        crate::i18n::tr(label),
+                        t.font(11.5),
+                        t.text,
+                    );
+                    if response.clicked() {
+                        let _ = app.run("crop.aspect", json!({"aspect": aspect}));
+                    }
+                }
+            });
+            ui.label(
+                egui::RichText::new(crate::i18n::tr("Drag a corner or edge to resize; drag inside the frame to move it."))
+                    .color(Tokens::get(ui.ctx()).text_dim),
+            );
         });
     }
     padded(ui, |ui| {
-        let original = app.session.catalog.photo(id).map(|p| {
-            let (w, h) = (p.width.max(1) as f64, p.height.max(1) as f64);
-            if d.orientation.swaps_axes() { h / w } else { w / h }
-        });
         ui.horizontal(|ui| {
-            ui.label(crate::i18n::tr("Aspect Ratio"));
+            if !mobile {
+                ui.label(crate::i18n::tr("Aspect Ratio"));
+            }
             let cur = aspect_label(app.crop_tool_aspect(), original);
             let t = Tokens::get(ui.ctx());
             let r = crate::widgets::dropdown(ui, "cropAspect", crate::i18n::tr(&cur), t.font(12.5), t.text);
@@ -301,7 +355,13 @@ fn crop(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         }
     });
     divider(ui);
-    header(ui, "Geometry");
+    crop_geometry(app, ui, &d, true);
+}
+
+fn crop_geometry(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &lightcraft_develop::DevelopSettings, heading: bool) {
+    if heading {
+        header(ui, "Geometry");
+    }
     padded(ui, |ui| {
         ui.label(crate::i18n::tr("Upright"));
         {
@@ -358,7 +418,7 @@ fn crop(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         }
     });
     for spec in lightcraft_develop::controls::in_section(lightcraft_develop::Section::Geometry).filter(|c| c.id != "crop.angle") {
-        let v = lightcraft_develop::controls::get(&d, spec.id).unwrap_or(spec.default);
+        let v = lightcraft_develop::controls::get(d, spec.id).unwrap_or(spec.default);
         let out = slider(ui, spec, v, true, None);
         super::edit::apply_slider_out(app, spec, out, |app, v| app.run("develop.set", json!({"control": spec.id, "value": v})));
     }
