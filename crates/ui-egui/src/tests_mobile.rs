@@ -301,10 +301,13 @@ fn phone_editor_bar_opens_crop_masks_curve_and_grading() {
     assert!(widget(&h, "button:auto").is_some(), "quick edits remain available on a phone");
     click(&mut h, "mobileEdit:color");
     assert!(widget(&h, "dropdown:profile").is_some(), "profile selection remains available on a phone");
+    assert!(widget(&h, "mobileEdit:grading").is_some(), "Color offers direct Grading access");
+    click(&mut h, "mobileEdit:light");
     click(&mut h, "mobileEdit:curve");
     let curve = widget(&h, "curve").expect("curve controls in the sheet");
     let sheet = widget(&h, "panel:sheet").expect("editor sheet");
     assert!(curve.top() < sheet.bottom() - 80.0, "curve canvas must be visible above the tool bar");
+    click(&mut h, "mobileEdit:color");
     click(&mut h, "mobileEdit:grading");
     assert!(widget(&h, "icon:grading-3way").is_some(), "color grading controls in the sheet");
 

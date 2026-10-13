@@ -201,6 +201,13 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         divider(ui);
     }
     section(app, ui, &d, "light", "Light", |app, ui, d| {
+        if focus.as_deref() == Some("light") {
+            let row = flyout_row(ui, "curve", crate::i18n::tr("Curve"), Icon::Curve, false);
+            register(ui.ctx(), "mobileEdit:curve", row.rect);
+            if row.clicked() {
+                set_mobile_edit_focus(ui.ctx(), "curve");
+            }
+        }
         if focus.as_deref() != Some("curve") {
             hdr_row(app, ui, d);
             for c in ["light.exposure", "light.contrast", "light.highlights", "light.shadows", "light.whites", "light.blacks"] {
@@ -222,8 +229,11 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         }
         let focused = focus.as_deref() == Some("curve");
         let open = focused || (focus.is_none() && app.ui.flyout_open("curve"));
-        if !focused && flyout_row(ui, "curve", crate::i18n::tr("Curve"), Icon::Curve, open).clicked() {
-            app.ui.toggle_flyout("curve");
+        if focus.is_none() {
+            let row = flyout_row(ui, "curve", crate::i18n::tr("Curve"), Icon::Curve, open);
+            if row.clicked() {
+                app.ui.toggle_flyout("curve");
+            }
         }
         if open {
             curve_editor(app, ui, id, d);
@@ -250,6 +260,13 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         ui.add_space(8.0);
     });
     section(app, ui, &d, "color", "Color", |app, ui, d| {
+        if focus.as_deref() == Some("color") {
+            let row = flyout_row(ui, "grading", crate::i18n::tr("Color Grading"), Icon::Presets, false);
+            register(ui.ctx(), "mobileEdit:grading", row.rect);
+            if row.clicked() {
+                set_mobile_edit_focus(ui.ctx(), "grading");
+            }
+        }
         if focus.as_deref() != Some("grading") {
             // White balance row
             egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 2, bottom: 2 }).show(ui, |ui| {
@@ -313,8 +330,11 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         }
         let focused = focus.as_deref() == Some("grading");
         let open = focused || (focus.is_none() && app.ui.flyout_open("grading"));
-        if !focused && flyout_row(ui, "grading", crate::i18n::tr("Color Grading"), Icon::Presets, open).clicked() {
-            app.ui.toggle_flyout("grading");
+        if focus.is_none() {
+            let row = flyout_row(ui, "grading", crate::i18n::tr("Color Grading"), Icon::Presets, open);
+            if row.clicked() {
+                app.ui.toggle_flyout("grading");
+            }
         }
         if open {
             grading(app, ui, d, id);
@@ -442,37 +462,38 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     }
 }
 
-/// A single category fills the phone's editing sheet. Curve and Grading focus the existing
-/// flyouts rather than introducing another set of adjustment controls.
+/// A single category fills the phone's editing sheet. Curve and Grading are reached directly
+/// from Light and Color, rather than adding more primary categories to the navigation row.
+fn set_mobile_edit_focus(ctx: &egui::Context, focus: &str) {
+    ctx.data_mut(|d| {
+        d.insert_temp(egui::Id::new("mobile-edit-category"), focus.to_string());
+        d.insert_temp(egui::Id::new("mobile-edit-scroll-reset"), true);
+    });
+}
+
 fn mobile_edit_navigation(ui: &mut egui::Ui) -> String {
     let key = egui::Id::new("mobile-edit-category");
     let mut focus = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| "light".into());
-    let mut changed = false;
     egui::ScrollArea::horizontal().id_salt("mobile-edit-categories").show(ui, |ui| {
         ui.horizontal(|ui| {
             for (id, label) in [
                 ("light", "Light"),
-                ("curve", "Curve"),
                 ("color", "Color"),
-                ("grading", "Color Grading"),
                 ("effects", "Effects"),
                 ("detail", "Detail"),
                 ("optics", "Optics"),
                 ("calibration", "Calibration"),
             ] {
-                let r = ui.selectable_label(focus == id, crate::i18n::tr(label));
+                let selected = focus == id || (id == "light" && focus == "curve") || (id == "color" && focus == "grading");
+                let r = ui.selectable_label(selected, crate::i18n::tr(label));
                 register(ui.ctx(), format!("mobileEdit:{id}"), r.rect);
                 if r.clicked() {
                     focus = id.into();
-                    ui.ctx().data_mut(|d| d.insert_temp(key, focus.clone()));
-                    changed = true;
+                    set_mobile_edit_focus(ui.ctx(), id);
                 }
             }
         });
     });
-    if changed {
-        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile-edit-scroll-reset"), true));
-    }
     focus
 }
 
