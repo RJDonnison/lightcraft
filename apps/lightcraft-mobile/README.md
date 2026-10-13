@@ -77,6 +77,10 @@ orientation, iPad Split View and phone browsers:
   to reset. Compact touch sliders have larger thumbs and display-only readouts. Curve channels and
   points have larger touch targets; a vertical drag starting away from a point scrolls the sheet.
   Mouse and trackpad retain their desktop behavior, including exact-value entry.
+- **Presets and profiles:** phone Presets show thumbnail previews rendered from the active photo
+  without turning on the desktop thumbnail preference; switching photos updates those previews.
+  Touch applies a look directly instead of relying on hover. Profile thumbnails and favorite
+  controls have larger touch targets.
 - **Import from the photo library:** File ▸ Import Photos… opens the system picker (PHPicker
   on iOS, Android's photo picker). The chosen photos are copied into `<library>/Picked`, then
   the usual Import review opens. On iOS each photo is fetched as its raw file when it has one,
@@ -253,14 +257,13 @@ The whole UI stays inside the iOS safe area (status bar, Dynamic Island, home in
   verified with Korean on Gboard. English on the emulator's Gboard commits letter by letter (as it
   does in a stock `EditText` there), so English autocorrect and swipe typing are still
   unverified, and Japanese/Chinese keyboards weren't tried.
-- **Touch.** The desktop layout's hit targets are small (an iPad's), and hover previews of
-  presets and profiles have no touch equivalent (their thumbnails show the look). Without a
+- **Touch.** The desktop layout's hit targets are small (an iPad's). Without a
   hardware keyboard, a few things stay out of reach: the smart-album rule editor's ⌥-click
   (insert a group after a rule), a radial mask's ⌥ (resize evenly), and the click-zoom ratio
   (pinch zooms instead). Open Library…, Browse Folder… and Move Folder To… need a folder the
   app may keep, which the mobile sandboxes don't offer. There's no inertia when panning a zoomed photo, and no double-tap-to-zoom gesture
-  beyond the existing tap toggle. The tone curve and color wheels still take every drag that
-  starts on them, since they're two-dimensional controls.
+  beyond the existing tap toggle. Point-curve drags away from an existing point scroll the sheet;
+  parametric tone curve regions and color wheels remain two-dimensional controls.
 - **Some full-size exports still come out smaller on phones.** A whole-image render peaks near
   60 bytes a pixel, so full-resolution work is capped, and full-size exports over the cap are
   tiled (see above). Exports with edits that can't be tiled, originals too big even for tiles,

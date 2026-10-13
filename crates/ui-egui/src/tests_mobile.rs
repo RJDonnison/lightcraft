@@ -49,6 +49,18 @@ fn widget(h: &Headless, id: &str) -> Option<egui::Rect> {
 }
 
 #[test]
+fn phone_presets_show_photo_variants_without_a_hover_or_setting() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    assert!(!h.app.ui.preset_thumbs, "desktop preference stays off");
+    let r = h.request("ui.clickWidget", json!({"id":"icon:presets"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    let sheet = widget(&h, "panel:sheet").expect("Presets sheet");
+    let (_, thumb) = h.app.widgets.iter().find(|(id, r)| id.starts_with("presetThumb:") && sheet.contains(r.center())).expect("visible preset image");
+    assert!(thumb.width() >= 90.0 && thumb.height() >= 70.0, "photo-derived look is large enough to compare");
+    assert!(!h.app.ui.preset_thumbs, "touch layout does not change the saved desktop setting");
+}
+
+#[test]
 fn phone_sheet_snaps_taller_and_dismisses_on_photo_tap() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     assert!(widget(&h, "panel:sheet").is_some());

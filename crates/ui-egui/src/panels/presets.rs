@@ -19,10 +19,13 @@ const THUMB_EDGE: usize = 128;
 
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
     egui::Frame::NONE.fill(t.chrome).stroke(egui::Stroke::new(1.0, t.divider)).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 46.0), Sense::hover());
-        ui.painter().text(pos2(hr.left() + 24.0, hr.center().y + 2.0), Align2::LEFT_CENTER, crate::i18n::tr("Presets"), t.semibold(15.0), t.text);
+        if !mobile {
+            ui.painter().text(pos2(hr.left() + 24.0, hr.center().y + 2.0), Align2::LEFT_CENTER, crate::i18n::tr("Presets"), t.semibold(15.0), t.text);
+        }
         let mut hdr = ui.new_child(
             egui::UiBuilder::new()
                 // the "+" glyph as far from the right edge as the title from the left (its 28 pt
@@ -49,8 +52,10 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         divider(ui);
         // amount slider (applies to the last applied preset)
         let amt_id = egui::Id::new("preset-amount");
-        let last: Option<(String, f64)> = ui.data(|d| d.get_temp(amt_id));
-        if let Some((pid, amount)) = last.clone() {
+        let active = app.session.active();
+        let last: Option<(lightcraft_catalog::PhotoId, String, f64)> = ui.data(|d| d.get_temp(amt_id));
+        let last = last.filter(|(photo, _, _)| Some(*photo) == active);
+        if let Some((photo, pid, amount)) = last.clone() {
             let spec = ControlSpec {
                 id: "presetAmount",
                 label: "Amount",
@@ -67,14 +72,19 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 // re-apply from the pre-preset state: undo last preset step then apply with the new amount
                 let _ = app.run("edit.undo", json!({}));
                 let _ = app.run("preset.apply", json!({"id": pid, "amount": v}));
-                ui.data_mut(|d| d.insert_temp(amt_id, (pid, v)));
+                ui.data_mut(|d| d.insert_temp(amt_id, (photo, pid, v)));
             }
             divider(ui);
         }
-        let active = app.session.active();
         let current = active.and_then(|id| app.session.develop_of(id)).map(|d| (*d).clone());
-        let thumbs = app.ui.preset_thumbs && active.is_some();
-        let row_h = if thumbs { 54.0 } else { 26.0 };
+        let thumbs = (mobile || app.ui.preset_thumbs) && active.is_some();
+        let row_h = if mobile {
+            88.0
+        } else if thumbs {
+            54.0
+        } else {
+            26.0
+        };
         let scroll = egui::ScrollArea::vertical().id_salt("presets-scroll").auto_shrink([false, false]).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             let mut groups: BTreeMap<String, Vec<Preset>> = BTreeMap::new();
@@ -87,7 +97,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 let builtin = items.iter().any(|p| p.builtin);
                 let open_id = egui::Id::new(("preset-group", &g));
                 let open: bool = ui.data(|d| d.get_temp(open_id)).unwrap_or(true);
-                let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::click());
+                let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), if mobile { 44.0 } else { 32.0 }), Sense::click());
                 register(ui.ctx(), format!("presetGroup:{g}"), r);
                 paint(
                     ui.painter(),
@@ -117,18 +127,24 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     let (pid, name, fav) = (pr.id.clone(), crate::i18n::builtin_label(&pr.name, pr.builtin).to_string(), pr.favorite);
                     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click());
                     register(ui.ctx(), format!("preset:{pid}"), r);
-                    let is_last = last.as_ref().is_some_and(|(l, _)| *l == pid);
+                    let is_last = last.as_ref().is_some_and(|(_, l, _)| *l == pid);
                     if is_last {
                         ui.painter().rect_filled(r, 0.0, t.tool_active);
                     } else if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, t.hover.gamma_multiply(0.7));
                     }
-                    let look = if thumbs || resp.hovered() { current.as_ref().map(|d| pr.apply(d, 1.0)) } else { None };
+                    let visible = ui.is_rect_visible(r);
+                    let look = if (thumbs && visible) || (!mobile && resp.hovered()) { current.as_ref().map(|d| pr.apply(d, 1.0)) } else { None };
                     let mut text_x = r.left() + 40.0;
-                    if thumbs && let (Some(id), Some(s)) = (active, look.as_ref()) {
-                        let tr = Rect::from_min_size(pos2(r.left() + 36.0, r.top() + 5.0), vec2(66.0, row_h - 10.0));
+                    if thumbs {
+                        let tr = Rect::from_min_size(
+                            pos2(r.left() + if mobile { 12.0 } else { 36.0 }, r.top() + 5.0),
+                            vec2(if mobile { 100.0 } else { 66.0 }, row_h - 10.0),
+                        );
+                        register(ui.ctx(), format!("presetThumb:{pid}"), tr);
                         ui.painter().rect_filled(tr, 2.0, t.canvas);
-                        if let Some(job) = app.session.variant_job(id, s, THUMB_EDGE)
+                        if let (Some(id), Some(s)) = (active, look.as_ref())
+                            && let Some(job) = app.session.variant_job(id, s, THUMB_EDGE)
                             && let Some(tex) = app.renderer.variant(job)
                         {
                             ui.painter().image(tex.tex.id(), tr, cover_uv(tr, tex.size), Color32::WHITE);
@@ -140,7 +156,8 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                         paint(ui.painter(), Rect::from_center_size(pos2(r.right() - 20.0, r.center().y), vec2(12.0, 12.0)), Icon::StarFilled, t.star);
                     }
                     // resting on a preset previews it in the loupe (no history entry)
-                    if resp.hovered()
+                    if !mobile
+                        && resp.hovered()
                         && let Some(s) = look
                     {
                         let label = crate::i18n::tr_format!("Preset: {name}", name = name);
@@ -151,7 +168,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     }
                     if resp.clicked() {
                         let _ = app.run("preset.apply", json!({"id": pid, "amount": 100}));
-                        ui.data_mut(|d| d.insert_temp(amt_id, (pid.clone(), 100.0)));
+                        if let Some(photo) = active {
+                            ui.data_mut(|d| d.insert_temp(amt_id, (photo, pid.clone(), 100.0)));
+                        }
                         ui.data_mut(|d| d.remove::<(lightcraft_catalog::PhotoId, Preset, String)>(egui::Id::new("last-preset-hover")));
                         app.toast(ui.ctx(), crate::i18n::tr_format!("Preset: {name}", name = name));
                     }

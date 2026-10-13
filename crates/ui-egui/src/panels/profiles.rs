@@ -22,6 +22,7 @@ const COLUMNS: usize = 2;
 
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let t = Tokens::get(ui.ctx());
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
     let d = (*app.session.develop_of(id).unwrap_or_default()).clone();
     // header: back + title
     let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 46.0), Sense::hover());
@@ -29,7 +30,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     if icon_button(&mut back, "profilesBack", Icon::ChevronLeft, vec2(28.0, 28.0), false, true, "Back to Edit").clicked() {
         app.ui.right = RightPanel::Edit;
     }
-    ui.painter().text(pos2(hr.left() + 46.0, hr.center().y + 2.0), Align2::LEFT_CENTER, crate::i18n::tr("Profiles"), t.semibold(15.0), t.text);
+    if !mobile {
+        ui.painter().text(pos2(hr.left() + 46.0, hr.center().y + 2.0), Align2::LEFT_CENTER, crate::i18n::tr("Profiles"), t.semibold(15.0), t.text);
+    }
     divider(ui);
     // the applied profile and its amount
     let (cr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::hover());
@@ -78,7 +81,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         // an imported folder named like a built-in group still opens and closes on its own
         let open_id = egui::Id::new(("profile-group", imported, title));
         let open: bool = ui.data(|m| m.get_temp(open_id)).unwrap_or(true);
-        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::click());
+        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), if mobile { 44.0 } else { 32.0 }), Sense::click());
         register(ui.ctx(), if imported { format!("profileGroup:lut:{title}") } else { format!("profileGroup:{title}") }, r);
         paint(
             ui.painter(),
@@ -185,14 +188,22 @@ fn cell_ui(
     // favourite star (always shown when set or on a touch screen, where a tap there toggles it; on
     // hover otherwise)
     let fav = app.session.profile_favorites.iter().any(|f| f == p_id);
-    let star = Rect::from_center_size(pos2(thumb.right() - 13.0, thumb.top() + 13.0), vec2(20.0, 20.0));
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
+    let inset = if mobile { 20.0 } else { 13.0 };
+    let side = if mobile { 40.0 } else { 20.0 };
+    let star = Rect::from_center_size(pos2(thumb.right() - inset, thumb.top() + inset), vec2(side, side));
     register(ui.ctx(), format!("profileStar:{}{}", if tag.is_empty() { "" } else { "fav:" }, p_id), star);
     let over_star = resp.hover_pos().is_some_and(|q| star.contains(q));
     if fav || resp.hovered() || crate::widgets::touch_screen(ui.ctx()) {
         painter.circle_filled(star.center(), 10.0, Color32::from_black_alpha(110));
-        paint(painter, star.shrink(4.0), if fav { Icon::StarFilled } else { Icon::Star }, if fav || over_star { t.star } else { Color32::WHITE });
+        paint(
+            painter,
+            Rect::from_center_size(star.center(), vec2(12.0, 12.0)),
+            if fav { Icon::StarFilled } else { Icon::Star },
+            if fav || over_star { t.star } else { Color32::WHITE },
+        );
     }
-    if resp.hovered() && !applied && !over_star {
+    if !mobile && resp.hovered() && !applied && !over_star {
         app.hover_preview =
             Some(HoverPreview { label: crate::i18n::tr_format!("Profile: {}", crate::i18n::profile_label(p_id, p_name)), settings: s.clone() });
         ui.data_mut(|m| m.insert_temp(egui::Id::new("last-profile-hover"), (id, p_id.to_string())));
