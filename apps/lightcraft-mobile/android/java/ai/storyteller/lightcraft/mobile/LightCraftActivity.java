@@ -184,7 +184,12 @@ public class LightCraftActivity extends NativeActivity {
         else mime = "application/octet-stream";
         if (android.os.Build.VERSION.SDK_INT < 29) {
             if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                runOnUiThread(() -> requestPermissions(new String[] {android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 817));
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        requestPermissions(new String[] {android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 817);
+                    }
+                });
                 return "error:allow storage access and retry export";
             }
             File root = android.os.Environment.getExternalStoragePublicDirectory(photo ? android.os.Environment.DIRECTORY_PICTURES : android.os.Environment.DIRECTORY_DOWNLOADS);
