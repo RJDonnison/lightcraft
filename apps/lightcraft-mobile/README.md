@@ -45,7 +45,9 @@ orientation, iPad Split View and phone browsers:
   Remove, Masking, More) and a bottom sheet showing the chosen tool. More opens the other
   panels; tapping the active tool or the photo dismisses the fixed-height sheet. Edit has visible,
   wrapped Light, Color, Effects, Detail, Optics and Calibration categories,
-  with Curve under Light and Grading under Color. Crop presents wrapped common aspect ratios above its
+  with Curve under Light and Grading under Color. A button at the photo's upper left shows the
+  RGB histogram over the photo; tap the graph to hide it. It starts hidden on phones and does
+  not affect the desktop histogram. Crop presents wrapped common aspect ratios above its
   other controls. Masking puts mask selection, creation, visibility and overlay controls beside
   the photo, with only the selected mask's components and Light/Color/Effects/Detail adjustments
   in the sheet.

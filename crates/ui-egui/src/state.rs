@@ -533,6 +533,8 @@ pub struct UiState {
     pub single_panel: bool,
     pub show_clipping: bool,
     pub histogram: bool,
+    /// Phone-only photo histogram overlay, independent of the desktop Edit histogram.
+    pub mobile_histogram: bool,
     /// Soft proofing (S in the loupe): render as `proof` would hold the photo.
     pub soft_proof: bool,
     pub proof: lightcraft_engine::pipeline::Proof,
@@ -1067,6 +1069,7 @@ impl Default for UiState {
             single_panel: false,
             show_clipping: false,
             histogram: true,
+            mobile_histogram: false,
             soft_proof: false,
             proof: lightcraft_engine::pipeline::Proof { dest_warning: false, ..Default::default() },
             proof_profile: None,

@@ -717,7 +717,8 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     }
     register(ui.ctx(), "canvas:image", img_rect);
     let map = CanvasMap::new(&frame, img_rect);
-    info_overlay(app, &p, canvas, &photo);
+    let phone_histogram = compact && crate::widgets::touch_screen(ui.ctx()) && !fullscreen;
+    info_overlay(app, &p, canvas, &photo, if phone_histogram { if app.ui.mobile_histogram { 108.0 } else { 48.0 } } else { 0.0 });
     if !fullscreen {
         filter_pill(app, ui, canvas);
     }
@@ -806,11 +807,31 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     if mobile_mask {
         super::masking::mobile_rail(app, ui.ctx(), canvas, id);
     }
+    if phone_histogram {
+        mobile_histogram(app, ui.ctx(), canvas, id);
+    }
+}
+
+/// An independent phone preference: the desktop Edit histogram remains where it was.
+fn mobile_histogram(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, id: PhotoId) {
+    egui::Area::new(egui::Id::new("mobile-histogram-area")).order(egui::Order::Foreground).fixed_pos(canvas.min + vec2(8.0, 8.0)).show(ctx, |ui| {
+        if app.ui.mobile_histogram {
+            ui.set_width(canvas.width().clamp(44.0, 190.0));
+            super::edit::histogram(app, ui, id, true);
+        } else {
+            let r = ui.add_sized([44.0, 44.0], egui::Button::new(""));
+            register(ui.ctx(), "mobileHistogram:toggle", r.rect);
+            crate::icons::paint(ui.painter(), r.rect.shrink(10.0), crate::icons::Icon::Curve, Tokens::get(ui.ctx()).text);
+            if r.on_hover_text(crate::i18n::tr("Show color histogram")).clicked() {
+                app.ui.mobile_histogram = true;
+            }
+        }
+    });
 }
 
 /// The info overlay at the canvas' top left (`view.infoOverlay`): file name with the capture date
 /// and size, or with the camera and exposure.
-fn info_overlay(app: &LightcraftApp, p: &egui::Painter, canvas: Rect, photo: &lightcraft_catalog::Photo) {
+fn info_overlay(app: &LightcraftApp, p: &egui::Painter, canvas: Rect, photo: &lightcraft_catalog::Photo, top_offset: f32) {
     use crate::state::InfoOverlay;
     let lines: Vec<String> = match app.ui.info_overlay {
         InfoOverlay::Off => return,
@@ -843,7 +864,7 @@ fn info_overlay(app: &LightcraftApp, p: &egui::Painter, canvas: Rect, photo: &li
         }
     };
     let t = Tokens::get(p.ctx());
-    let mut y = canvas.top() + 12.0;
+    let mut y = canvas.top() + 12.0 + top_offset;
     for (i, l) in lines.iter().enumerate() {
         let font = if i == 0 { t.semibold(15.0) } else { t.font(12.5) };
         let g = p.layout_no_wrap(l.clone(), font, Color32::WHITE);
@@ -853,7 +874,7 @@ fn info_overlay(app: &LightcraftApp, p: &egui::Painter, canvas: Rect, photo: &li
         p.galley(at, g.clone(), Color32::WHITE);
         y += g.size().y + 3.0;
     }
-    register(p.ctx(), "canvas:infoOverlay", Rect::from_min_max(canvas.min, pos2(canvas.left() + 320.0, y)));
+    register(p.ctx(), "canvas:infoOverlay", Rect::from_min_max(pos2(canvas.left(), canvas.top() + top_offset), pos2(canvas.left() + 320.0, y)));
 }
 
 /// What the user did to a face box this frame.

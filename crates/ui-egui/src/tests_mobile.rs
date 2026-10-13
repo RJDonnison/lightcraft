@@ -49,6 +49,37 @@ fn widget(h: &Headless, id: &str) -> Option<egui::Rect> {
 }
 
 #[test]
+fn phone_histogram_toggles_on_photo_without_changing_desktop_preference() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    assert!(!h.app.ui.mobile_histogram, "phone histogram starts hidden");
+    assert!(h.app.ui.histogram, "desktop histogram preference remains enabled");
+    assert!(widget(&h, "mobileHistogram:toggle").is_some());
+    assert!(widget(&h, "mobileHistogram:graph").is_none());
+    h.app.run("view.infoOverlay", json!({"mode": "basic"})).unwrap();
+    h.step();
+    let r = h.request("ui.clickWidget", json!({"id":"mobileHistogram:toggle"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    let graph = widget(&h, "mobileHistogram:graph").expect("histogram over photo");
+    let info = widget(&h, "canvas:infoOverlay").expect("info below histogram");
+    assert!(graph.left() < 24.0 && graph.bottom() < info.top(), "graph and info do not overlap: {graph:?} {info:?}");
+    assert!(h.app.ui.histogram);
+    let r = h.request("ui.clickWidget", json!({"id":"mobileHistogram:graph"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert!(!h.app.ui.mobile_histogram);
+    assert!(widget(&h, "mobileHistogram:toggle").is_some());
+    assert!(widget(&h, "panel:sheet").is_some(), "overlay tap must not dismiss editor");
+    let saved = serde_json::to_value(&h.app.ui).unwrap();
+    assert_eq!(saved["mobileHistogram"], false);
+
+    let mut desktop = Headless::new(LightcraftApp::new(lightcraft_engine::Session::with_demo(), Services::default()), [600.0, 900.0], 1.0);
+    desktop.settle(SETTLE);
+    assert!(widget(&desktop, "mobileHistogram:toggle").is_none());
+    assert!(widget(&desktop, "histogram").is_some(), "desktop Edit histogram is unchanged");
+}
+
+#[test]
 fn phone_export_uses_small_chooser_and_mobile_publisher() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};

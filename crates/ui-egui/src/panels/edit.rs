@@ -96,7 +96,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let preview_only = app.session.catalog.photo(id).and_then(|p| p.preview_only.clone());
 
     if app.ui.histogram && focus.is_none() {
-        histogram(app, ui, id);
+        histogram(app, ui, id, false);
     }
     if app.ui.soft_proof && focus.is_none() {
         soft_proofing(app, ui, id);
@@ -632,7 +632,7 @@ fn section(
 
 // ------------------------------------------------------------------------------ histogram
 
-fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
+pub(super) fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, mobile_overlay: bool) {
     let t = Tokens::get(ui.ctx());
     let w = ui.available_width();
     // the loupe render of this photo, else its thumbnail (grid view before the loupe has rendered it)
@@ -650,7 +650,7 @@ fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     // lower in the compact layout's sheet, which has little height for the sliders
     let h = if super::compact::is_compact(ui.ctx()) { 64.0 } else { 118.0 };
     let (r, resp) = ui.allocate_exact_size(vec2(w, h + legend), Sense::click());
-    register(ui.ctx(), "histogram", r);
+    register(ui.ctx(), if mobile_overlay { "mobileHistogram:graph" } else { "histogram" }, r);
     let p = ui.painter();
     p.rect_filled(r, 0.0, t.button);
     let plot = Rect::from_min_max(r.min + vec2(0.0, 6.0), pos2(r.right(), r.bottom() - 26.0 - legend));
@@ -744,7 +744,11 @@ fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         }
     }
     if resp.clicked() {
-        app.ui.show_clipping = !app.ui.show_clipping;
+        if mobile_overlay {
+            app.ui.mobile_histogram = false;
+        } else {
+            app.ui.show_clipping = !app.ui.show_clipping;
+        }
     }
     // EXIF strip
     if let Some(ph) = app.session.catalog.photo(id) {
