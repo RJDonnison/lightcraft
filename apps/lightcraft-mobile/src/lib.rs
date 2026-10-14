@@ -345,10 +345,7 @@ fn services(export_dir: String) -> Services {
                                 .filter(|m| m.len() <= 2_000_000)
                                 .and_then(|_| std::fs::read(&row[2]).ok())
                                 .and_then(|bytes| lightcraft_codecs::decode_thumbnail(&bytes, 192).ok())
-                                .map(|t| {
-                                    let rgb: Vec<u8> = t.image.data.iter().flat_map(|p| p.iter().copied()).collect();
-                                    egui::ColorImage::from_rgb([t.image.width, t.image.height], &rgb)
-                                });
+                                .and_then(|t| lightcraft_ui_egui::DevicePhoto::preview_from_rgba(&t.image));
                             photos.push(lightcraft_ui_egui::DevicePhoto { id: row[0].clone(), name: row[1].clone(), preview });
                         }
                         Some(lightcraft_ui_egui::DevicePage::Photos { offset, photos, more })

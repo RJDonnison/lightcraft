@@ -183,6 +183,40 @@ pub struct DevicePhoto {
     pub preview: Option<egui::ColorImage>,
 }
 
+impl DevicePhoto {
+    /// Convert a bounded RGBA gallery thumbnail without interpreting alpha bytes as RGB pixels.
+    /// A malformed decoder result has no preview rather than crashing the photo browser.
+    pub fn preview_from_rgba(image: &lightcraft_raster::Rgba8) -> Option<egui::ColorImage> {
+        if image.width == 0
+            || image.height == 0
+            || image.width > 192
+            || image.height > 192
+            || image.width.checked_mul(image.height) != Some(image.data.len())
+        {
+            return None;
+        }
+        let rgba: Vec<u8> = image.data.iter().flat_map(|pixel| pixel.iter().copied()).collect();
+        Some(egui::ColorImage::from_rgba_unmultiplied([image.width, image.height], &rgba))
+    }
+}
+
+#[cfg(test)]
+mod device_photo_preview_tests {
+    use super::DevicePhoto;
+
+    #[test]
+    fn non_square_rgba_preview_keeps_alpha_and_rejects_bad_dimensions() {
+        let image = lightcraft_raster::Rgba8 { width: 1, height: 2, data: vec![[10, 20, 30, 255], [40, 50, 60, 0]] };
+        let preview = DevicePhoto::preview_from_rgba(&image).expect("valid RGBA preview");
+        assert_eq!(preview.size, [1, 2]);
+        assert_eq!(preview.pixels[0], egui::Color32::from_rgb(10, 20, 30));
+        assert_eq!(preview.pixels[1], egui::Color32::TRANSPARENT);
+
+        let malformed = lightcraft_raster::Rgba8 { width: 2, ..image };
+        assert!(DevicePhoto::preview_from_rgba(&malformed).is_none());
+    }
+}
+
 pub enum DevicePage {
     Photos { offset: usize, photos: Vec<DevicePhoto>, more: bool },
     PermissionNeeded,
