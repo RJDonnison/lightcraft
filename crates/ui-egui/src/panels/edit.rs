@@ -850,6 +850,48 @@ fn soft_proofing(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
 
 // ------------------------------------------------------------------------------ tone curve
 
+/// The phone's Curve tool uses a larger workspace on the photo instead of the short editor sheet.
+pub(super) fn mobile_curve_active(app: &LightcraftApp, ctx: &egui::Context) -> bool {
+    super::compact::is_compact(ctx)
+        && crate::widgets::touch_screen(ctx)
+        && app.ui.view == crate::state::ViewMode::Detail
+        && app.ui.right == crate::state::RightPanel::Edit
+        && !app.ui.presets
+        && ctx.data(|data| data.get_temp::<String>(egui::Id::new("mobile-edit-category"))).as_deref() == Some("curve")
+}
+
+pub(super) fn mobile_curve_workspace(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect) {
+    let Some(id) = app.session.active() else { return };
+    let d = app.session.develop_of(id).unwrap_or_default();
+    let landscape = super::compact::beside(ctx);
+    let width = if landscape { super::compact::side_width(canvas.width()) } else { canvas.width() };
+    // Leave a substantial strip of the image visible above the portrait workspace.
+    let height = if landscape { canvas.height() } else { canvas.height() * 0.64 };
+    let size = vec2(width.max(240.0), height.max(240.0));
+    let pos = pos2(canvas.right() - size.x, canvas.bottom() - size.y);
+    egui::Area::new(egui::Id::new("mobile-curve-workspace")).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
+        ui.set_min_size(size);
+        ui.set_max_size(size);
+        let t = Tokens::get(ctx);
+        egui::Frame::NONE.fill(t.chrome).stroke(Stroke::new(1.0, t.divider)).show(ui, |ui| {
+            ui.set_min_size(size);
+            ui.set_max_size(size);
+            register(ctx, "mobileCurve:workspace", ui.max_rect());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(crate::i18n::tr("Curve")).font(t.semibold(15.0)).color(t.text));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if text_button(ui, "mobileCurveDone", crate::i18n::tr("Done"), false).clicked() {
+                        set_mobile_edit_focus(ctx, "light");
+                    }
+                });
+            });
+            egui::ScrollArea::vertical().id_salt("mobile-curve-scroll").max_height((size.y - 52.0).max(120.0)).show(ui, |ui| {
+                curve_editor(app, ui, id, &d);
+            });
+        });
+    });
+}
+
 fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &DevelopSettings) {
     let t = Tokens::get(ui.ctx());
     let touch = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());

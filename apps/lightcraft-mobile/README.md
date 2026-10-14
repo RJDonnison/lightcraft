@@ -45,9 +45,11 @@ orientation, iPad Split View and phone browsers:
   Remove, Masking, More) and a bottom sheet showing the chosen tool. More opens the other
   panels; tapping the active tool or the photo dismisses the fixed-height sheet. Edit has visible,
   wrapped Light, Color, Effects, Detail, Optics and Calibration categories,
-  with Curve under Light and Grading under Color. A button at the photo's upper left shows the
-  RGB histogram over the photo; tap the graph to hide it. It starts hidden on phones and does
-  not affect the desktop histogram. Crop separates aspect/straightening controls from Geometry,
+  with Curve under Light and Grading under Color. Curve opens a larger focused workspace over
+  the photo in portrait or beside it in landscape; Done returns to the Edit sheet. A button at
+  the photo's upper left shows the RGB histogram over the photo; tap the graph to hide it. The
+  phone overlay starts hidden and does not affect the desktop histogram. Crop separates
+  aspect/straightening controls from Geometry,
   with visual aspect cards and larger visible corner and edge handles. Common ratios and
   straightening appear first; More crop options holds custom ratios, precise angle, rotation,
   flips and overlays. Drag a handle to resize or drag inside the frame to move it. Masking puts
@@ -97,7 +99,7 @@ orientation, iPad Split View and phone browsers:
   one that starts up or down scrolls the panel, even when it begins on a slider's track. A single
   tap on either track edge changes by one step; a middle tap does nothing, and a middle double-tap
   resets. Compact touch sliders have larger thumbs and display-only readouts. Curve channels and
-  points have larger touch targets; a vertical drag starting away from a point scrolls the sheet.
+  points have larger touch targets; a vertical drag starting away from a point scrolls the Curve workspace.
   Mouse and trackpad retain their desktop behavior, including exact-value entry.
 - **Presets and profiles:** phone Presets show thumbnail previews rendered from the active photo
   without turning on the desktop thumbnail preference; switching photos updates those previews.

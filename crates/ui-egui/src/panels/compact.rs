@@ -125,7 +125,11 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             app.ui.left_panel = false;
         }
     } else if sheet_open(app) {
-        sheet(app, ui);
+        if super::edit::mobile_curve_active(app, ui.ctx()) {
+            super::edit::mobile_curve_workspace(app, ui.ctx(), ui.available_rect_before_wrap());
+        } else {
+            sheet(app, ui);
+        }
     }
 }
 

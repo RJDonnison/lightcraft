@@ -280,22 +280,20 @@ fn phone_slider_readout_is_not_editable_and_single_edge_taps_step() {
 }
 
 #[test]
-fn phone_curve_scrolls_from_empty_space_but_dragging_a_point_edits_it() {
+fn phone_curve_empty_drag_does_not_add_a_point_but_point_drag_edits_it() {
     let mut h = demo([390.0, 844.0], json!({"view": "detail", "right": "edit"}));
     touch_screen(&mut h);
     click(&mut h, "mobileEdit:curve");
     click(&mut h, "curveChannel:master");
     let graph = widget(&h, "curve").expect("curve graph");
-    let sheet = widget(&h, "panel:sheet").expect("fixed sheet");
-    assert!(widget(&h, "mobileSheet:handle").is_none());
-    assert!(graph.height() < sheet.height() - 100.0, "graph fits in fixed sheet: {graph:?} {sheet:?}");
+    let workspace = widget(&h, "mobileCurve:workspace").expect("focused workspace");
+    assert!(widget(&h, "panel:sheet").is_none());
+    assert!(graph.height() >= 250.0 && graph.height() < workspace.height(), "large graph fits its workspace: {graph:?} {workspace:?}");
     let id = h.app.session.active().expect("photo");
     let before = h.app.session.develop_of(id).unwrap_or_default().curve.master.clone();
     let empty = graph.left_top() + egui::vec2(graph.width() * 0.15, 55.0);
     touch_drag(&mut h, empty, empty - egui::vec2(2.0, 70.0), 10);
-    assert_eq!(h.app.session.develop_of(id).unwrap_or_default().curve.master, before, "scrolling does not add points");
-    let shifted = widget(&h, "curve").expect("graph after scroll");
-    assert!(shifted.top() < graph.top() - 20.0, "the panel scrolls over the graph: {graph:?} → {shifted:?}");
+    assert_eq!(h.app.session.develop_of(id).unwrap_or_default().curve.master, before, "an empty-space vertical drag does not add points");
     let r = h.request(
         "engine.execute",
         json!({"command": "develop.curve", "params": {"channel": "master", "points": [[0.0, 0.0], [0.5, 0.5], [1.0, 1.0]]}}),

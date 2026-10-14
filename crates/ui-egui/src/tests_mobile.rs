@@ -795,9 +795,13 @@ fn phone_editor_bar_opens_crop_masks_curve_and_grading() {
     assert!(widget(&h, "mobileEdit:grading").is_some(), "Color offers direct Grading access");
     click(&mut h, "mobileEdit:light");
     click(&mut h, "mobileEdit:curve");
-    let curve = widget(&h, "curve").expect("curve controls in the sheet");
-    let sheet = widget(&h, "panel:sheet").expect("editor sheet");
-    assert!(curve.top() < sheet.bottom() - 80.0, "curve canvas must be visible above the tool bar");
+    let curve = widget(&h, "curve").expect("curve graph in the focused workspace");
+    let workspace = widget(&h, "mobileCurve:workspace").expect("focused curve workspace");
+    assert!(widget(&h, "panel:sheet").is_none(), "the short editor sheet must not compete with the Curve workspace");
+    assert!(curve.height() >= 250.0, "the focused phone graph has room for precise points: {curve:?}");
+    assert!(curve.top() >= workspace.top() && curve.top() < workspace.bottom(), "graph begins within the workspace");
+    click(&mut h, "button:mobileCurveDone");
+    assert!(widget(&h, "panel:sheet").is_some(), "Done returns to the ordinary Edit sheet");
     click(&mut h, "mobileEdit:color");
     click(&mut h, "mobileEdit:grading");
     assert!(widget(&h, "icon:grading-3way").is_some(), "color grading controls in the sheet");
@@ -820,6 +824,28 @@ fn phone_editor_bar_opens_crop_masks_curve_and_grading() {
     click(&mut h, "mobileMask:Color");
     assert!(widget(&h, "slider:hue").is_some(), "Color exposes its local adjustment sliders");
     assert!(widget(&h, "slider:exposure").is_none(), "Light sliders are outside the chosen category");
+}
+
+#[test]
+fn landscape_phone_curve_leaves_the_photo_visible_beside_the_workspace() {
+    let mut h = touch_app(ViewMode::Detail, [844.0, 390.0]);
+    if widget(&h, "panel:sheet").is_none() {
+        h.app.run("panel.edit", json!({})).unwrap();
+        h.step();
+    }
+    let open = h.request("ui.clickWidget", json!({"id": "mobileEdit:curve"}), Duration::from_secs(20));
+    assert_eq!(open["ok"], true, "{open}");
+    h.step();
+    h.step();
+    let workspace = widget(&h, "mobileCurve:workspace").expect("landscape curve workspace");
+    let photo = h.app.image_rect.expect("photo beside curve");
+    assert!(photo.right() <= workspace.left(), "the curve workspace must not cover the photo: {photo:?} {workspace:?}");
+    assert!(photo.width() >= 100.0 && photo.height() >= 150.0, "photo remains useful alongside the graph: {photo:?}");
+    assert!(widget(&h, "curve").is_some());
+    let done = h.request("ui.clickWidget", json!({"id": "button:mobileCurveDone"}), Duration::from_secs(20));
+    assert_eq!(done["ok"], true, "{done}");
+    h.step();
+    assert!(widget(&h, "panel:sheet").is_some());
 }
 
 #[test]

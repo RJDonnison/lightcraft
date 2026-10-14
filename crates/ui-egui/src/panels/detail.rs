@@ -405,6 +405,8 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     // the full-screen preview shows the photo only: no tool overlays
     let right = if fullscreen { RightPanel::None } else { app.ui.right };
     let mobile_mask = compact && crate::widgets::touch_screen(ui.ctx()) && right == RightPanel::Masking;
+    let curve_side = phone && super::compact::beside(ui.ctx()) && super::edit::mobile_curve_active(app, ui.ctx());
+    let curve_width = if curve_side { super::compact::side_width(canvas.width()) } else { 0.0 };
     let crop_tool = right == RightPanel::Crop;
     let frame = Frame::with_lens(photo.width.max(1) as usize, photo.height.max(1) as usize, &d, !crop_tool, photo.embedded_lens.as_ref());
     let aspect = frame.aspect() as f32;
@@ -416,7 +418,13 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     } else {
         24.0
     });
-    let area = if mobile_mask { Rect::from_min_max(area.min, pos2((area.right() - 60.0).max(area.left()), area.bottom())) } else { area };
+    let area = if mobile_mask {
+        Rect::from_min_max(area.min, pos2((area.right() - 60.0).max(area.left()), area.bottom()))
+    } else if curve_side {
+        Rect::from_min_max(area.min, pos2((canvas.right() - curve_width - 8.0).max(area.left()), area.bottom()))
+    } else {
+        area
+    };
     let native = output_px(&frame);
     let texture_side = texture_side(ui.ctx());
     // two views (before, after): side by side or stacked
@@ -457,8 +465,13 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     // another crop): a texture's whole-pixel size is a little off the exact aspect, and the crop
     // tool's overlays need the frame's own geometry.
     let display_aspect = visible_texture_aspect.filter(|a| !crop_tool && (a / aspect - 1.0).abs() > 0.02).unwrap_or(aspect);
-    let interaction =
-        if mobile_mask { Rect::from_min_max(canvas.min, pos2((canvas.right() - 60.0).max(canvas.left()), canvas.bottom())) } else { canvas };
+    let interaction = if mobile_mask {
+        Rect::from_min_max(canvas.min, pos2((canvas.right() - 60.0).max(canvas.left()), canvas.bottom()))
+    } else if curve_side {
+        Rect::from_min_max(canvas.min, pos2((canvas.right() - curve_width).max(canvas.left()), canvas.bottom()))
+    } else {
+        canvas
+    };
     let resp = ui.interact(interaction, egui::Id::new("loupe"), Sense::click_and_drag());
     let phone_hold = compact && crate::widgets::touch_screen(ui.ctx()) && !fullscreen;
     let (held_original, released_original) =
