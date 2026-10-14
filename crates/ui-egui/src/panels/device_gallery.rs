@@ -8,17 +8,18 @@ use serde_json::json;
 
 use crate::{DevicePage, LightcraftApp, state::ViewMode, widgets::register};
 
-const MAX_ITEMS: usize = 2000;
+const PAGE_SIZE: usize = 48;
 
 struct Item {
     id: String,
-    name: String,
     texture: Option<TextureHandle>,
+    preview_available: bool,
 }
 
 #[derive(Default)]
 pub struct State {
     items: Vec<Item>,
+    requested_offset: usize,
     requested: bool,
     more: bool,
     opening: bool,
@@ -62,16 +63,22 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         state.requested = false;
         match page {
             DevicePage::Photos { offset, photos, more } => {
-                if offset == 0 {
-                    state.items.clear();
-                }
-                if offset == state.items.len() {
-                    for photo in photos.into_iter().take(MAX_ITEMS.saturating_sub(state.items.len())) {
+                if offset == state.requested_offset {
+                    let appending = offset == state.items.len();
+                    for (index, photo) in photos.into_iter().take(PAGE_SIZE).enumerate() {
+                        let position = offset.saturating_add(index);
+                        let preview_available = photo.preview.is_some();
                         let texture =
                             photo.preview.map(|image| ctx.load_texture(format!("device-photo:{}", photo.id), image, TextureOptions::LINEAR));
-                        state.items.push(Item { id: photo.id, name: photo.name, texture });
+                        if let Some(item) = state.items.get_mut(position) {
+                            *item = Item { id: photo.id, texture, preview_available };
+                        } else if position == state.items.len() {
+                            state.items.push(Item { id: photo.id, texture, preview_available });
+                        }
                     }
-                    state.more = more && state.items.len() < MAX_ITEMS;
+                    if appending {
+                        state.more = more;
+                    }
                     state.message = None;
                 }
             }
@@ -131,33 +138,42 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         }
     }
     let mut selected = None;
+    let mut wanted_offset = None;
     egui::ScrollArea::vertical().id_salt("device-photos-scroll").show_viewport(ui, |ui, viewport| {
         let width = (ui.available_width() / 3.0 - 4.0).max(44.0);
-        let row_h = width + 27.0;
+        let row_h = width + 4.0;
         let start = (viewport.min.y.max(0.0) / row_h) as usize;
         let end = ((viewport.max.y.max(0.0) / row_h).ceil() as usize).saturating_add(1);
         let rows = state.items.len().div_ceil(3);
+        // Hold only thumbnails near the visible rows. MediaStore's disk cache can
+        // provide earlier pages again when the user scrolls back.
+        let keep_start = start.saturating_mul(3).saturating_sub(PAGE_SIZE);
+        let keep_end = end.saturating_mul(3).saturating_add(PAGE_SIZE);
+        for (index, item) in state.items.iter_mut().enumerate() {
+            if index < keep_start || index >= keep_end {
+                item.texture = None;
+            }
+        }
+        if !state.requested {
+            if let Some(index) = (start.saturating_mul(3)..end.saturating_mul(3).min(state.items.len()))
+                .find(|&index| state.items.get(index).is_some_and(|item| item.preview_available && item.texture.is_none()))
+            {
+                wanted_offset = Some(index / PAGE_SIZE * PAGE_SIZE);
+            } else if state.more && viewport.max.y + row_h * 3.0 >= rows as f32 * row_h {
+                wanted_offset = Some(state.items.len());
+            }
+        }
         ui.add_space(start.min(rows) as f32 * row_h);
         for row in start.min(rows)..end.min(rows) {
             ui.horizontal(|ui| {
                 for col in 0..3 {
                     let Some(item) = state.items.get(row.saturating_mul(3).saturating_add(col)) else { break };
-                    let (rect, response) = ui.allocate_exact_size(vec2(width, row_h - 2.0), Sense::click());
+                    let (rect, response) = ui.allocate_exact_size(vec2(width, width), Sense::click());
                     register(ui.ctx(), format!("devicePhoto:{}", item.id), rect);
-                    let image_rect = Rect::from_min_size(rect.min, vec2(width, width));
-                    ui.painter().rect_filled(image_rect, 4.0, Color32::DARK_GRAY);
+                    ui.painter().rect_filled(rect, 2.0, Color32::DARK_GRAY);
                     if let Some(texture) = &item.texture {
-                        ui.painter().image(texture.id(), image_rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                        ui.painter().image(texture.id(), rect, cover_uv(texture.size_vec2()), Color32::WHITE);
                     }
-                    let label_rect = Rect::from_min_max(pos2(rect.left() + 2.0, image_rect.bottom() + 4.0), pos2(rect.right() - 2.0, rect.bottom()));
-                    register(ui.ctx(), format!("devicePhotoLabel:{}", item.id), label_rect);
-                    ui.painter().with_clip_rect(label_rect).text(
-                        pos2(rect.left() + 2.0, image_rect.bottom() + 4.0),
-                        egui::Align2::LEFT_TOP,
-                        &item.name,
-                        egui::FontId::proportional(11.0),
-                        Color32::WHITE,
-                    );
                     if response.clicked() {
                         selected = Some(item.id.clone());
                     }
@@ -165,24 +181,14 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             });
         }
         ui.add_space(rows.saturating_sub(end.min(rows)) as f32 * row_h);
-        if state.more && !state.requested && viewport.max.y + row_h * 3.0 >= rows as f32 * row_h {
-            state.requested = true;
-            if let Some(gallery) = app.services.device_gallery.as_mut()
-                && let Err(err) = (gallery.request)(state.items.len())
-            {
-                state.requested = false;
-                state.message = Some(err);
-            }
+        if state.more || state.requested {
+            ui.add_space(row_h);
         }
     });
     if !state.requested && state.items.is_empty() && state.message.is_none() {
-        state.requested = true;
-        if let Some(gallery) = app.services.device_gallery.as_mut()
-            && let Err(err) = (gallery.request)(0)
-        {
-            state.requested = false;
-            state.message = Some(err);
-        }
+        request_page(app.services.device_gallery.as_mut(), state, 0);
+    } else if let Some(offset) = wanted_offset {
+        request_page(app.services.device_gallery.as_mut(), state, offset);
     }
     if let Some(id) = selected
         && !state.opening
@@ -201,5 +207,52 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     // A permission dialog or background decode completes asynchronously.
     if state.requested || state.opening {
         ctx.request_repaint_after(std::time::Duration::from_millis(200));
+    }
+}
+
+// A gallery tile is square, but a portrait or landscape preview must keep its
+// proportions. Crop the center of the source image instead of stretching it.
+fn cover_uv(size: egui::Vec2) -> Rect {
+    if size.x <= 0.0 || size.y <= 0.0 {
+        return Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+    }
+    if size.x > size.y {
+        let margin = (1.0 - size.y / size.x) / 2.0;
+        Rect::from_min_max(pos2(margin, 0.0), pos2(1.0 - margin, 1.0))
+    } else {
+        let margin = (1.0 - size.x / size.y) / 2.0;
+        Rect::from_min_max(pos2(0.0, margin), pos2(1.0, 1.0 - margin))
+    }
+}
+
+fn request_page(gallery: Option<&mut crate::DeviceGallery>, state: &mut State, offset: usize) {
+    state.requested = true;
+    state.requested_offset = offset;
+    if let Some(gallery) = gallery {
+        if let Err(err) = (gallery.request)(offset) {
+            state.requested = false;
+            state.message = Some(err);
+        }
+    } else {
+        state.requested = false;
+        state.message = Some("Device Photos is unavailable".into());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cover_uv;
+    use egui::vec2;
+
+    #[test]
+    fn square_gallery_crops_portrait_and_landscape_without_distortion() {
+        let landscape = cover_uv(vec2(192.0, 96.0));
+        assert_eq!(landscape.min.x, 0.25);
+        assert_eq!(landscape.max.x, 0.75);
+        assert_eq!(landscape.min.y, 0.0);
+        let portrait = cover_uv(vec2(96.0, 192.0));
+        assert_eq!(portrait.min.y, 0.25);
+        assert_eq!(portrait.max.y, 0.75);
+        assert_eq!(portrait.min.x, 0.0);
     }
 }

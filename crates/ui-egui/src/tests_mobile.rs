@@ -270,8 +270,8 @@ fn phone_device_photos_browse_previews_without_import_then_switch_to_edits() {
     assert!(widget(&h, "icon:edit").is_none(), "device browsing cannot edit a stale catalog selection");
     assert!(widget(&h, "devicePhoto:42").is_some());
     let cell = widget(&h, "devicePhoto:42").expect("gallery cell");
-    let label = widget(&h, "devicePhotoLabel:42").expect("clipped filename area");
-    assert!(cell.contains_rect(label), "filename stays within its own cell");
+    assert!((cell.width() - cell.height()).abs() < 1.0, "gallery previews are square: {cell:?}");
+    assert!(widget(&h, "devicePhotoLabel:42").is_none(), "gallery has no filename rows");
     assert_eq!(h.app.session.catalog.photos().count(), catalog_count, "previews are not imported photos");
     let r = h.request("ui.clickWidget", json!({"id":"galleryTab:My Edits"}), SETTLE);
     assert_eq!(r["ok"], true, "{r}");
@@ -294,6 +294,65 @@ fn phone_device_photos_browse_previews_without_import_then_switch_to_edits() {
     assert!(!h.app.ui.library_home);
     assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::Album(lightcraft_catalog::AlbumId(album)));
     assert!(requests.lock().unwrap().is_empty() || requests.lock().unwrap().as_slice() == [0]);
+}
+
+#[test]
+fn phone_device_gallery_scrolls_continuously_and_reloads_earlier_thumbnails() {
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
+
+    let replies = Arc::new(Mutex::new(VecDeque::new()));
+    let offsets = Arc::new(Mutex::new(Vec::new()));
+    let for_offsets = offsets.clone();
+    let for_request = replies.clone();
+    let for_poll = replies.clone();
+    let services = Services {
+        device_gallery: Some(crate::DeviceGallery {
+            request: Box::new(move |offset| {
+                for_offsets.lock().unwrap().push(offset);
+                let photos = (offset..offset + 48)
+                    .map(|id| crate::DevicePhoto {
+                        id: id.to_string(),
+                        name: format!("Photo {id}"),
+                        preview: Some(egui::ColorImage::filled([3, 2], egui::Color32::RED)),
+                    })
+                    .collect();
+                for_request.lock().unwrap().push_back(crate::DevicePage::Photos { offset, photos, more: offset < 96 });
+                Ok(())
+            }),
+            take_page: Box::new(move || for_poll.lock().unwrap().pop_front()),
+            open: Box::new(|_| panic!("paging does not import originals")),
+            take_open: Box::new(|| None),
+        }),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    app.ui.view = ViewMode::PhotoGrid;
+    app.ui.device_gallery = true;
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    assert!(widget(&h, "devicePhoto:0").is_some());
+    assert!(widget(&h, "gallery:older").is_none(), "there are no visible pages");
+    let r = h.request("ui.hoverWidget", json!({"id":"devicePhoto:0"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    let r = h.request("ui.scroll", json!({"dx":0,"dy":-3000}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.settle(SETTLE);
+    assert!(offsets.lock().unwrap().contains(&48), "scrolling fetches the next bounded batch");
+    let r = h.request("ui.scroll", json!({"dx":0,"dy":-1800}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.settle(SETTLE);
+    assert!(
+        h.app.widgets.iter().any(|(id, _)| id.strip_prefix("devicePhoto:").and_then(|id| id.parse::<usize>().ok()).is_some_and(|id| id >= 48)),
+        "newly fetched photos join the same scrollable grid"
+    );
+    assert!(widget(&h, "devicePhoto:0").is_none(), "far-away cells are virtualized");
+    let r = h.request("ui.scroll", json!({"dx":0,"dy":6000}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.settle(SETTLE);
+    assert!(widget(&h, "devicePhoto:0").is_some());
+    assert!(offsets.lock().unwrap().iter().filter(|&&offset| offset == 0).count() >= 2, "returning reloads released thumbnails");
 }
 
 #[test]

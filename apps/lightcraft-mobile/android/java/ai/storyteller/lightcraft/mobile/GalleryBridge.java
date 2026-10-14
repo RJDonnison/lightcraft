@@ -41,7 +41,12 @@ final class GalleryBridge {
     }
 
     void page(final int offset) {
-        if (offset < 0 || offset > 2000) return;
+        // Every page stays bounded, but the gallery itself need not fit an arbitrary
+        // maximum count. Reject an offset that could overflow when adding PAGE.
+        if (offset < 0 || offset > Integer.MAX_VALUE - PAGE) {
+            enqueue(pages, new String[] {"error", "Photo page is out of range"});
+            return;
+        }
         queried = true;
         final int request = generation.incrementAndGet();
         synchronized (lock) { pages.clear(); }

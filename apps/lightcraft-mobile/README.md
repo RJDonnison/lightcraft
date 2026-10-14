@@ -49,17 +49,18 @@ orientation, iPad Split View and phone browsers:
   RGB histogram over the photo; tap the graph to hide it. It starts hidden on phones and does
   not affect the desktop histogram. Crop separates aspect/straightening controls from Geometry,
   with visual aspect cards and larger visible corner and edge handles. Drag a handle to resize
-   or drag inside the frame to move it; rotation uses the explicit controls. Masking puts
-   effective white-on-black previews, creation, selection, visibility, overlay and component
-   management beside the photo. The lower sheet shows only the selected mask's
-   Light/Color/Effects/Detail adjustments. Remove marks the selected correction's target and
-   source separately on the photo, with finger-sized hit targets: tap to select, drag a marker to
-   move it, and paint away from markers to add a correction.
+  or drag inside the frame to move it; rotation uses the explicit controls. Masking puts
+  effective white-on-black previews, creation, selection, visibility, overlay and component
+  management beside the photo. The lower sheet shows only the selected mask's
+  Light/Color/Effects/Detail adjustments. Remove marks the selected correction's target and
+  source separately on the photo, with finger-sized hit targets: tap to select, drag a marker to
+  move it, and paint away from markers to add a correction.
   On non-touch compact windows the tools remain inside the sheet. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.
 - **Library:** on Android the phone opens a photo-first grid with **Device Photos**, **My Edits**
-  and **Library** tabs. Device Photos browses the accessible system gallery with paged thumbnails;
+  and **Library** tabs. Device Photos scrolls through the accessible system gallery in an image-only,
+  three-column grid; background requests load small batches without visible pages or filename rows.
   My Edits lists only catalog photos with saved adjustments. Library holds albums, All Photos,
   Recently Added, Picks and Recently Deleted, as well as manual Import Photos. Browsing does not
   copy originals. Opening a device photo for editing
