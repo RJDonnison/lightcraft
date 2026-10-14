@@ -44,6 +44,49 @@ fn tap(h: &mut Headless, at: egui::Pos2) {
     }
 }
 
+fn photo_swipe(h: &mut Headless, dx: f32) {
+    let start = h.app.canvas_rect.expect("photo canvas").center();
+    h.input([finger(egui::TouchPhase::Start, start, 31), egui::Event::PointerMoved(start), button(start, true)]);
+    h.step();
+    let mut end = start;
+    for n in 1..=10 {
+        end = start + egui::vec2(dx * n as f32 / 10.0, 2.0);
+        h.input([finger(egui::TouchPhase::Move, end, 31), egui::Event::PointerMoved(end)]);
+        h.step();
+    }
+    h.input([finger(egui::TouchPhase::End, end, 31), button(end, false)]);
+    h.step();
+    h.input([egui::Event::PointerGone]);
+    h.step();
+}
+
+#[test]
+fn phone_closed_editor_hides_filmstrip_and_swipes_only_catalog_source() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    h.app.run("library.source", json!({"kind":"myEdits"})).unwrap();
+    h.step();
+    let edited = h.app.session.visible_cloned();
+    assert!(edited.len() >= 2, "demo has multiple edited photos");
+    let current = h.app.session.active().expect("an edited photo");
+    let at = edited.iter().position(|id| *id == current).expect("active in My Edits");
+    let (direction, next) = if let Some(next) = edited.get(at + 1) { (-165.0, *next) } else { (165.0, edited[at - 1]) };
+    photo_swipe(&mut h, direction);
+    assert_eq!(h.app.session.active(), Some(current), "swipes with the sheet open do not navigate");
+    let r = h.request("ui.clickWidget", json!({"id":"icon:edit"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert!(widget(&h, "panel:sheet").is_none());
+    assert!(!h.app.widgets.iter().any(|(id, _)| id.starts_with("film:")), "no phone filmstrip with the sheet closed");
+    photo_swipe(&mut h, direction);
+    assert_eq!(h.app.session.active(), Some(next), "swipe follows the edited-only catalog source");
+    photo_swipe(&mut h, -direction);
+    assert_eq!(h.app.session.active(), Some(current));
+    h.app.ui.device_gallery = true;
+    h.step();
+    photo_swipe(&mut h, direction);
+    assert_eq!(h.app.session.active(), Some(current), "device browsing must not navigate catalog photos");
+}
+
 fn widget(h: &Headless, id: &str) -> Option<egui::Rect> {
     h.app.widgets.iter().find(|(w, _)| w == id).map(|(_, r)| *r)
 }

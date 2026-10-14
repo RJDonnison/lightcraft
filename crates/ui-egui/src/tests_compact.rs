@@ -415,6 +415,11 @@ fn loupe(h: &Headless) -> egui::Rect {
 #[test]
 fn pinch_zooms_the_loupe_about_the_fingers_and_back_to_fit() {
     let mut h = demo(PHONE, json!({"view": "detail", "right": "none"}));
+    // Announce touch before measuring Fit: the phone hides its filmstrip even when
+    // the sheet is closed, unlike a non-touch compact window.
+    h.input([finger(1, egui::TouchPhase::Cancel, egui::Pos2::ZERO)]);
+    h.step();
+    h.step();
     let fit = loupe(&h);
     // spread two fingers over a point left of the centre: the image point there stays put
     let centre = fit.center() - egui::vec2(fit.width() / 4.0, 0.0);

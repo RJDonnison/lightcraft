@@ -385,9 +385,11 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let full = ui.max_rect();
     let fullscreen = app.ui.fullscreen;
-    // compact layout: the edit sheet takes the filmstrip's place
+    // A phone navigates its current catalog source by swiping the photo. The horizontal
+    // filmstrip takes space from the image even when the editor sheet is closed.
     let compact = super::compact::is_compact(ui.ctx());
-    let show_film = app.ui.filmstrip && !fullscreen && !(compact && super::compact::sheet_open(app));
+    let phone = compact && crate::widgets::touch_screen(ui.ctx());
+    let show_film = app.ui.filmstrip && !fullscreen && !phone && !(compact && super::compact::sheet_open(app));
     let film_h = if show_film { film_height(ui.ctx(), full) } else { 0.0 };
     let canvas = Rect::from_min_max(full.min, pos2(full.right(), full.bottom() - film_h));
     app.canvas_rect = Some(canvas);
@@ -1348,7 +1350,9 @@ fn general_interaction(
     }
     // click toggles Fit ↔ the chosen click-zoom ratio at the clicked point; drag pans when zoomed
     let zoomed = img.width() > canvas.width() + 1.0 || img.height() > canvas.height() + 1.0;
-    if !zoomed && swipe(app, ui, resp, canvas) {
+    let phone = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
+    let may_swipe = !phone || (!super::compact::sheet_open(app) && !app.ui.device_gallery && !app.ui.library_home);
+    if !zoomed && may_swipe && swipe(app, ui, resp, canvas) {
         return;
     }
     if resp.double_clicked() || (resp.clicked() && !zoomed) {

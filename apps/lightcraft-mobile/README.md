@@ -82,7 +82,9 @@ orientation, iPad Split View and phone browsers:
   tools in the touch photo editor.
 - **Loupe gestures:** pinch zooms about the fingers, from Fit to 1600%, and pinching back in
   snaps to Fit. Moving both fingers pans. At Fit, a one-finger swipe sideways drags the photo
-  along, and letting go past a sixth of the screen shows the next or previous photo. When
+  along, and letting go past a sixth of the screen shows the next or previous photo from the
+  current catalog source when all editor tools are closed. The collapsed phone editor has no
+  filmstrip; Device Photos never navigates catalog images through a photo swipe. When
   zoomed in, one finger pans as before. Hold a finger still on the photo to preview the original;
   lift it to restore the edit. Crop, Masking and Remove still use their own touch gestures.
   A trackpad pinch (or ⌘/Ctrl-scroll) over the loupe
