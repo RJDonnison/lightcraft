@@ -488,7 +488,8 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
                 for m in &d.masks {
                     let icon = m.components.first().map(|c| kind_label(&c.shape).1).unwrap_or(Icon::Mask);
                     let selected = app.session.active_mask == Some(m.id);
-                    let (rect, response) = ui.allocate_exact_size(vec2(48.0, 48.0), Sense::click());
+                    let (rect, _) = ui.allocate_exact_size(vec2(48.0, 48.0), Sense::hover());
+                    let response = ui.interact(rect, egui::Id::new(("mobile-mask-tile", m.id)), Sense::click());
                     register(ctx, format!("mask:{}", m.id), rect);
                     ui.painter().rect_filled(rect.shrink(2.0), 5.0, if selected { t.tool_active } else { t.inset });
                     let mut preview = false;
@@ -521,10 +522,34 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
                     if selected {
                         ui.painter().rect_stroke(rect.shrink(2.0), 5.0, Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
                     }
-                    let response = response.on_hover_text(&m.name);
-                    if response.clicked() {
+                    let response = response.on_hover_text(format!("{} — hold or press Shift+F10 to manage", m.name));
+                    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &m.name));
+                    let keyboard_manage = response.has_focus()
+                        && ui.input(|i| {
+                            i.events.iter().any(
+                                |event| matches!(event, egui::Event::Key { key: egui::Key::F10, pressed: true, modifiers, .. } if modifiers.shift),
+                            )
+                        });
+                    let manage = response.secondary_clicked() || keyboard_manage;
+                    if manage {
+                        let _ = app.run("mask.select", json!({"id": m.id}));
+                        egui::Popup::open_id(ctx, egui::Popup::default_response_id(&response));
+                    } else if response.clicked() {
                         let _ = app.run("mask.select", json!({"id": m.id}));
                     }
+                    egui::Popup::context_menu(&response).at_position(pos2((rect.left() - 284.0).max(canvas.left() + 4.0), rect.top())).show(|ui| {
+                        ui.set_min_width(280.0);
+                        egui::ScrollArea::vertical().max_height((canvas.height() - 60.0).max(160.0)).show(ui, |ui| {
+                            ui.label(egui::RichText::new(&m.name).strong());
+                            ui.menu_button(crate::i18n::tr("Mask options"), |ui| {
+                                if let Some(index) = d.masks.iter().position(|item| item.id == m.id) {
+                                    mask_menu(app, ui, m.id, &m.name, m.visible, index, d.masks.len());
+                                }
+                            });
+                            selected_mask_management(app, ui, t, m);
+                            mask_progress(app, ui, t);
+                        });
+                    });
                 }
             });
             if let Some(m) = d.masks.iter().find(|m| Some(m.id) == app.session.active_mask) {
@@ -541,21 +566,6 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
                 if visible.clicked() {
                     let _ = app.run("mask.visible", json!({"id": m.id}));
                 }
-                let manage = icon_button(ui, "mobileMaskRail:manage", Icon::Dots, vec2(48.0, 44.0), false, true, "Manage mask and its components");
-                register(ctx, "mobileMaskRail:manage", manage.rect);
-                egui::Popup::menu(&manage).show(|ui| {
-                    ui.set_min_width(280.0);
-                    egui::ScrollArea::vertical().max_height((canvas.height() - 60.0).max(160.0)).show(ui, |ui| {
-                        ui.label(egui::RichText::new(&m.name).strong());
-                        ui.menu_button(crate::i18n::tr("Mask options"), |ui| {
-                            if let Some(index) = d.masks.iter().position(|item| item.id == m.id) {
-                                mask_menu(app, ui, m.id, &m.name, m.visible, index, d.masks.len());
-                            }
-                        });
-                        selected_mask_management(app, ui, t, m);
-                        mask_progress(app, ui, t);
-                    });
-                });
             }
             let overlay = icon_button(ui, "mobileMaskRail:overlay", Icon::Mask, vec2(48.0, 44.0), app.ui.mask_overlay, true, "Mask overlay options");
             register(ctx, "mobileMaskRail:overlay", overlay.rect);

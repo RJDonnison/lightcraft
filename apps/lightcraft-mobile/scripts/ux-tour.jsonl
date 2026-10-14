@@ -13,7 +13,7 @@
 {"method":"ui.screenshot"}
 {"method":"engine.execute","params":{"command":"mask.add","params":{"kind":"linear","start":[0.5,0.1],"end":[0.5,0.7]}}}
 {"method":"ui.screenshot"}
-{"method":"ui.clickWidget","params":{"id":"mobileMaskRail:manage"}}
+{"method":"ui.clickWidget","params":{"id":"mask:1","button":"right"}}
 {"method":"ui.screenshot"}
 {"method":"ui.clickWidget","params":{"id":"icon:crop"}}
 {"method":"ui.screenshot"}

@@ -877,13 +877,91 @@ fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
     let r = h.request("ui.clickWidget", json!({"id": "mobileMaskRail:add"}), Duration::from_secs(20));
     assert_eq!(r["ok"], true, "{r}");
     h.step();
-    let r = h.request("ui.clickWidget", json!({"id": "mobileMaskRail:manage"}), Duration::from_secs(20));
+    assert!(widget(&h, "mobileMaskRail:manage").is_none(), "management has no separate ellipsis control");
+    let r = h.request("ui.clickWidget", json!({"id": format!("mask:{}", masks[0].id), "button": "right"}), Duration::from_secs(20));
     assert_eq!(r["ok"], true, "{r}");
     h.step();
     assert!(widget(&h, "button:maskAddComp").is_some(), "the side rail opens component management");
     assert!(widget(&h, "component:0").is_some(), "the component tree lives in rail management");
     h.settle(SETTLE);
     assert!(widget(&h, &format!("mobileMaskRail:preview:{}", masks[0].id)).is_some(), "effective mask has a white-on-black preview");
+}
+
+#[test]
+fn holding_an_unselected_mask_opens_its_management_without_a_photo_gesture() {
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        h.app.run("panel.masking", json!({})).unwrap();
+        h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
+        h.app.run("mask.add", json!({"kind": "radial"})).unwrap();
+        h.settle(SETTLE);
+        let photo = h.app.session.active().expect("active photo");
+        let masks = h.app.session.develop_of(photo).expect("develop settings").masks.clone();
+        assert_eq!(h.app.session.active_mask, Some(masks[1].id));
+        let tile = widget(&h, &format!("mask:{}", masks[0].id)).expect("first mask tile").center();
+        h.input([finger(egui::TouchPhase::Start, tile, 78), egui::Event::PointerMoved(tile), button(tile, true)]);
+        h.step();
+        for _ in 0..90 {
+            h.step();
+        }
+        assert_eq!(h.app.session.active_mask, Some(masks[0].id), "holding selects the mask to manage at {size:?}");
+        let management = widget(&h, "button:maskAddComp").expect("management opens beside the held mask");
+        assert!(management.intersects(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(size[0], size[1]))));
+        h.input([finger(egui::TouchPhase::End, tile, 78), button(tile, false)]);
+        h.step();
+        h.input([egui::Event::PointerGone]);
+        h.step();
+        assert_eq!(h.app.session.active_mask, Some(masks[0].id), "release must not select another mask");
+        assert_eq!(h.app.session.develop_of(photo).expect("develop settings").masks.len(), 2);
+    }
+}
+
+#[test]
+fn scrolling_the_mask_rail_cancels_management_hold() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    h.app.run("panel.masking", json!({})).unwrap();
+    h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
+    h.app.run("mask.add", json!({"kind": "radial"})).unwrap();
+    h.step();
+    let photo = h.app.session.active().expect("active photo");
+    let masks = h.app.session.develop_of(photo).expect("develop settings").masks.clone();
+    let tile = widget(&h, &format!("mask:{}", masks[0].id)).expect("first mask tile").center();
+    let moved = tile + egui::vec2(0.0, 55.0);
+    h.input([finger(egui::TouchPhase::Start, tile, 79), egui::Event::PointerMoved(tile), button(tile, true)]);
+    h.step();
+    h.input([finger(egui::TouchPhase::Move, moved, 79), egui::Event::PointerMoved(moved)]);
+    h.step();
+    for _ in 0..90 {
+        h.step();
+    }
+    assert!(widget(&h, "button:maskAddComp").is_none(), "a rail scroll must not open management");
+    h.input([finger(egui::TouchPhase::End, moved, 79), button(moved, false)]);
+    h.step();
+    h.input([egui::Event::PointerGone]);
+    h.step();
+    assert_eq!(h.app.session.active_mask, Some(masks[1].id), "scrolling does not select the touched mask");
+    assert_eq!(h.app.session.develop_of(photo).expect("develop settings").masks.len(), 2);
+}
+
+#[test]
+fn focused_mask_tile_opens_management_from_keyboard_without_a_hold() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    h.app.run("panel.masking", json!({})).unwrap();
+    h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
+    h.step();
+    let photo = h.app.session.active().expect("active photo");
+    let mask = h.app.session.develop_of(photo).expect("develop settings").masks[0].id;
+    h.view.ctx.memory_mut(|memory| memory.request_focus(egui::Id::new(("mobile-mask-tile", mask))));
+    h.input([egui::Event::Key {
+        key: egui::Key::F10,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers { shift: true, ..Default::default() },
+    }]);
+    h.step();
+    assert!(widget(&h, "button:maskAddComp").is_some(), "keyboard users can manage the focused tile");
+    assert!(widget(&h, "mobileMaskRail:manage").is_none());
 }
 
 #[test]

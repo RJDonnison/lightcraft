@@ -51,7 +51,8 @@ orientation, iPad Split View and phone browsers:
   with visual aspect cards and larger visible corner and edge handles. Drag a handle to resize
   or drag inside the frame to move it; rotation uses the explicit controls. Masking puts
   effective white-on-black previews, creation, selection, visibility, overlay and component
-  management beside the photo. The lower sheet shows only the selected mask's
+  management beside the photo. Tap a mask preview to select it; hold it to manage that mask
+  (or use its context action / Shift+F10 with a keyboard). The lower sheet shows only the selected mask's
   Light/Color/Effects/Detail adjustments. Remove marks the selected correction's target and
   source separately on the photo, with finger-sized hit targets: tap to select, drag a marker to
   move it, and paint away from markers to add a correction.
