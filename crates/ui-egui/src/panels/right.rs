@@ -438,50 +438,47 @@ fn remove(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
                 }
             }
         });
-        ui.add_space(8.0);
-        ui.label(crate::i18n::tr_format!("{} spot(s) on this photo", d.spots.len()));
-        ui.add_space(4.0);
-        if text_button(ui, "findDust", crate::i18n::tr("Find Dust Spots"), false)
-            .on_hover_text(crate::i18n::tr("Heal the small, soft dark spots sensor dust leaves on smooth areas"))
-            .clicked()
-        {
-            match app.run("spot.findDust", json!({})) {
-                Ok(r) => {
-                    let n = r["added"].as_u64().unwrap_or(0);
-                    app.toast(
-                        ui.ctx(),
-                        if n == 0 {
-                            "No dust spots found".to_string()
-                        } else {
-                            crate::i18n::tr_format!("Healed {n} dust spot{}", if n == 1 { "" } else { "s" }, n = n)
-                        },
-                    );
-                }
-                Err(e) => app.toast(ui.ctx(), e),
-            }
+        if !mobile {
+            ui.add_space(8.0);
+            ui.label(crate::i18n::tr_format!("{} spot(s) on this photo", d.spots.len()));
+            ui.add_space(4.0);
+            find_dust(app, ui);
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new(crate::i18n::tr("Paint over a distraction on the photo to remove it.")).color(Tokens::get(ui.ctx()).text_dim),
+            );
         }
-        ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new(crate::i18n::tr(if mobile {
-                "Paint elsewhere to remove. Tap a correction to select it; drag its target or source marker to move it."
-            } else {
-                "Paint over a distraction on the photo to remove it."
-            }))
-            .color(Tokens::get(ui.ctx()).text_dim),
-        );
     });
     // brush settings; with a spot selected they edit that spot too
     let sel = app.session.active_spot.and_then(|i| d.spots.get(i).map(|sp| (i, sp.clone())));
-    if let Some((i, sp)) = &sel {
-        (app.ui.remove_size, app.ui.remove_feather, app.ui.remove_opacity) = (sp.size as f32, sp.feather as f32, sp.opacity as f32);
-        divider(ui);
+    let selected_label = sel.as_ref().map(|(i, sp)| {
         let mode = match sp.mode {
             lightcraft_develop::SpotMode::Heal => "Heal",
             lightcraft_develop::SpotMode::Clone => "Clone",
             lightcraft_develop::SpotMode::Remove => "Remove",
             lightcraft_develop::SpotMode::Fill => "Content-Aware",
         };
-        super::edit::sub_title(ui, &crate::i18n::tr_format!("{mode} spot {} of {}", i + 1, d.spots.len(), mode = mode));
+        crate::i18n::tr_format!("{mode} spot {} of {}", i + 1, d.spots.len(), mode = mode)
+    });
+    if let Some((_, sp)) = &sel {
+        (app.ui.remove_size, app.ui.remove_feather, app.ui.remove_opacity) = (sp.size as f32, sp.feather as f32, sp.opacity as f32);
+        if !mobile {
+            divider(ui);
+        }
+        if !mobile && let Some(label) = &selected_label {
+            super::edit::sub_title(ui, label);
+        }
+    }
+    if mobile {
+        let t = Tokens::get(ui.ctx());
+        egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 6, bottom: 0 }).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(crate::i18n::tr("Brush")).font(t.semibold(13.0)));
+                if let Some(label) = &selected_label {
+                    ui.label(egui::RichText::new(label).color(t.text_dim));
+                }
+            });
+        });
     }
     let plain = |id: &'static str, label: &'static str, min: f64, max: f64, default: f64| lightcraft_develop::ControlSpec {
         id,
@@ -512,6 +509,15 @@ fn remove(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
         if sel.is_some() {
             super::edit::apply_slider_out(app, &spec, out, |app, v| app.run("spot.update", json!({key: v / scale})));
         }
+    }
+    if mobile {
+        padded(ui, |ui| {
+            ui.label(
+                egui::RichText::new(crate::i18n::tr("Paint to add a correction. Tap a marker to select it; drag its target or source to move it."))
+                    .color(Tokens::get(ui.ctx()).text_dim),
+            );
+            find_dust(app, ui);
+        });
     }
     if sel.is_some() {
         padded(ui, |ui| {
@@ -554,6 +560,28 @@ fn remove(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
             }
         }
     });
+}
+
+fn find_dust(app: &mut LightcraftApp, ui: &mut egui::Ui) {
+    if text_button(ui, "findDust", crate::i18n::tr("Find Dust Spots"), false)
+        .on_hover_text(crate::i18n::tr("Heal the small, soft dark spots sensor dust leaves on smooth areas"))
+        .clicked()
+    {
+        match app.run("spot.findDust", json!({})) {
+            Ok(r) => {
+                let n = r["added"].as_u64().unwrap_or(0);
+                app.toast(
+                    ui.ctx(),
+                    if n == 0 {
+                        "No dust spots found".to_string()
+                    } else {
+                        crate::i18n::tr_format!("Healed {n} dust spot{}", if n == 1 { "" } else { "s" }, n = n)
+                    },
+                );
+            }
+            Err(e) => app.toast(ui.ctx(), e),
+        }
+    }
 }
 
 fn red_eye(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {

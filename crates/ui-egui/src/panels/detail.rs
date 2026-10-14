@@ -2304,6 +2304,7 @@ fn remove_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respo
         app.gesture = Some(Gesture::SpotMove { spot, source });
     }
     if let Some(Gesture::SpotMove { spot, source }) = app.gesture.clone() {
+        app.brush_live = None;
         if resp.dragged()
             && let Some(q) = resp.interact_pointer_pos()
         {
@@ -2335,13 +2336,31 @@ fn remove_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respo
         }
     }
     if let Some(Gesture::Spot { points }) = &app.gesture {
-        for q in points {
-            p.circle_filled(map.screen(*q), r, Color32::from_white_alpha(60));
+        if phone {
+            let screen: Vec<Pos2> = points.iter().map(|q| map.screen(*q)).collect();
+            let params = crate::brush_live::LiveParams {
+                clip: app.canvas_rect.unwrap_or(map.rect),
+                scale: ui.ctx().pixels_per_point(),
+                r,
+                hard: r * (1.0 - (app.ui.remove_feather / 100.0).clamp(0.0, 1.0)),
+                flow: 1.0,
+                density: 1.0,
+                color: [235, 235, 235],
+                opacity: (app.ui.remove_opacity / 100.0).clamp(0.0, 1.0) * 0.5,
+            };
+            crate::brush_live::paint(&mut app.brush_live, ui.ctx(), &p, params, &screen);
+        } else {
+            for q in points {
+                p.circle_filled(map.screen(*q), r, Color32::from_white_alpha(60));
+            }
         }
+    } else {
+        app.brush_live = None;
     }
     if (resp.drag_stopped() || resp.clicked())
         && let Some(Gesture::Spot { points }) = app.gesture.take()
     {
+        app.brush_live = None;
         let mode = match app.ui.tool.as_str() {
             "heal" => "heal",
             "clone" => "clone",

@@ -53,9 +53,11 @@ orientation, iPad Split View and phone browsers:
   effective white-on-black previews, creation, selection, visibility, overlay and component
   management beside the photo. Tap a mask preview to select it; hold it to manage that mask
   (or use its context action / Shift+F10 with a keyboard). The lower sheet shows only the selected mask's
-  Light/Color/Effects/Detail adjustments. Remove marks the selected correction's target and
-  source separately on the photo, with finger-sized hit targets: tap to select, drag a marker to
-  move it, and paint away from markers to add a correction.
+  Light/Color/Effects/Detail adjustments. Remove puts the shared Brush Size and Feather controls
+  before its own Opacity and correction actions, and shows a continuous preview while painting.
+  Remove marks the selected correction's target and source separately on the photo, with
+  finger-sized hit targets: tap to select, drag a marker to move it, and paint away from markers
+  to add a correction.
   On non-touch compact windows the tools remain inside the sheet. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.

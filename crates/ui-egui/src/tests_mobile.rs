@@ -987,6 +987,37 @@ fn phone_remove_marks_target_and_source_for_touch_selection() {
 }
 
 #[test]
+fn phone_remove_brush_shows_continuous_coverage_and_keeps_spot_commands() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    h.app.run("panel.remove", json!({})).unwrap();
+    h.settle(SETTLE);
+    assert!(widget(&h, "slider:ui.removeSize").is_some());
+    assert!(widget(&h, "slider:ui.removeFeather").is_some());
+    assert!(widget(&h, "slider:ui.removeOpacity").is_some());
+    let r = h.request("ui.clickWidget", json!({"id":"button:removeMode-clone"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    let photo = h.app.image_rect.expect("photo");
+    let start = photo.center() + egui::vec2(-25.0, -30.0);
+    let end = start + egui::vec2(44.0, 0.0);
+    h.input([finger(egui::TouchPhase::Start, start, 12), egui::Event::PointerMoved(start), button(start, true)]);
+    h.step();
+    h.input([finger(egui::TouchPhase::Move, end, 12), egui::Event::PointerMoved(end)]);
+    h.step();
+    let stroke = h.app.brush_live.as_ref().expect("phone Remove previews continuous brush coverage while painting");
+    let ([w, height], _) = stroke.size();
+    assert!(w > 0 && height > 0);
+    h.input([finger(egui::TouchPhase::End, end, 12), button(end, false)]);
+    h.step();
+    h.step();
+    assert!(h.app.brush_live.is_none(), "preview is cleared after committing the correction");
+    let id = h.app.session.active().expect("active photo");
+    let develop = h.app.session.develop_of(id).expect("develop settings");
+    assert_eq!(develop.spots.len(), 1);
+    assert_eq!(develop.spots[0].mode, lightcraft_develop::SpotMode::Clone);
+}
+
+#[test]
 fn small_phone_editor_tools_fit_and_more_opens_secondary_panels() {
     let mut h = touch_app(ViewMode::Detail, [360.0, 740.0]);
     let click = |h: &mut Headless, id: &str| {
