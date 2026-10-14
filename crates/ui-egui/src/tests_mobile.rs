@@ -92,6 +92,41 @@ fn widget(h: &Headless, id: &str) -> Option<egui::Rect> {
 }
 
 #[test]
+fn phone_header_keeps_editor_navigation_but_does_not_export_a_stale_gallery_selection() {
+    let services = Services {
+        device_gallery: Some(crate::DeviceGallery {
+            request: Box::new(|_| Ok(())),
+            take_page: Box::new(|| None),
+            open: Box::new(|_| Ok(())),
+            take_open: Box::new(|| None),
+        }),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    app.ui.view = ViewMode::PhotoGrid;
+    app.ui.device_gallery = true;
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    assert!(widget(&h, "menu:all").is_some());
+    assert!(widget(&h, "icon:back").is_none(), "the gallery tabs are the root navigation");
+    assert!(widget(&h, "icon:share").is_none(), "gallery browsing must not export a stale catalog selection");
+
+    h.app.ui.device_gallery = false;
+    h.app.ui.view = ViewMode::Detail;
+    h.step();
+    assert!(widget(&h, "icon:back").is_some());
+    assert!(widget(&h, "icon:share").is_some());
+    assert!(widget(&h, "icon:more").is_some());
+    assert!(widget(&h, "menu:all").is_some());
+    let top = widget(&h, "icon:back").unwrap();
+    assert!(top.top() >= 0.0 && top.bottom() <= 44.0, "the editor keeps a compact safe header: {top:?}");
+    let r = h.request("ui.clickWidget", json!({"id":"icon:more"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(widget(&h, "icon:info").is_some(), "secondary tools remain reachable");
+}
+
+#[test]
 fn phone_histogram_toggles_on_photo_without_changing_desktop_preference() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     assert!(!h.app.ui.mobile_histogram, "phone histogram starts hidden");

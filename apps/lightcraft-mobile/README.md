@@ -39,8 +39,10 @@ Below 600pt of width or 500pt of height (inside the safe area), `lightcraft-ui-e
 a compact layout (`crates/ui-egui/src/panels/compact.rs`). It's used on phones in either
 orientation, iPad Split View and phone browsers:
 
-- **Top bar:** My Photos, Back, Menu, a search field, Filter and Export in the grid; Back,
-  Edit Photo and Export while editing on a touch screen.
+- **Top bar:** catalog grids have My Photos, Back, Menu, Search, Filter and Export; Device Photos
+  and the Library home use their persistent tabs instead of a misleading Back or catalog Export.
+  The touch editor has a smaller Back, Menu and Export header without a repeated title; its
+  bottom More control opens the secondary editing tools.
 - **Detail view:** the photo on top, with a persistent touch tool bar (Presets, Edit, Crop,
   Remove, Masking, More) and a bottom sheet showing the chosen tool. More opens the other
   panels; tapping the active tool or the photo dismisses the fixed-height sheet. Edit has visible,

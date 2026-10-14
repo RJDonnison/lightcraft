@@ -139,7 +139,7 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let gallery_home =
         app.services.device_gallery.is_some() && crate::widgets::touch_screen(ui.ctx()) && (app.ui.device_gallery || app.ui.library_home);
     egui::Panel::top("top_bar")
-        .exact_size(t.top_bar_h + 4.0)
+        .exact_size(if editor { 44.0 } else { t.top_bar_h + 4.0 })
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin { left: BAR_MARGIN, right: BAR_MARGIN, top: 0, bottom: 0 }))
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
@@ -150,11 +150,8 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 {
                     let _ = app.run("view.leftPanel", json!({}));
                 }
-                if icon_button(ui, "back", Icon::Back, BUTTON, false, true, "Back").clicked() {
+                if !gallery_home && icon_button(ui, "back", Icon::Back, BUTTON, false, true, "Back").clicked() {
                     let _ = app.run("view.back", json!({}));
-                }
-                if editor {
-                    ui.label(egui::RichText::new(crate::i18n::tr("Edit Photo")).font(t.semibold(15.0)).color(t.text));
                 }
                 if !app.native_menu {
                     ui.add_space(4.0);
@@ -165,7 +162,7 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 let rest = ui.available_rect_before_wrap();
                 let mut right = ui.new_child(egui::UiBuilder::new().max_rect(rest).layout(egui::Layout::right_to_left(egui::Align::Center)));
                 right.spacing_mut().item_spacing.x = 0.0;
-                if icon_button(&mut right, "share", Icon::Share, BUTTON, false, true, "Export").clicked() {
+                if !gallery_home && icon_button(&mut right, "share", Icon::Share, BUTTON, false, true, "Export").clicked() {
                     if crate::widgets::touch_screen(right.ctx()) && app.services.mobile_export.is_some() {
                         right.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile-export-open"), true));
                     } else {
