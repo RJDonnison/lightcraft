@@ -604,16 +604,9 @@ fn section(
         if !selected {
             return;
         }
-        sub_title(
-            ui,
-            if focus == "curve" {
-                "Curve"
-            } else if focus == "grading" {
-                "Color Grading"
-            } else {
-                title
-            },
-        );
+        if focus == "curve" || focus == "grading" {
+            sub_title(ui, if focus == "curve" { "Curve" } else { "Color Grading" });
+        }
         body(app, ui, d);
         return;
     }
