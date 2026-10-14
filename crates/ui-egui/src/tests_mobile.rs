@@ -106,6 +106,17 @@ fn phone_histogram_toggles_on_photo_without_changing_desktop_preference() {
     let graph = widget(&h, "mobileHistogram:graph").expect("histogram over photo");
     let info = widget(&h, "canvas:infoOverlay").expect("info below histogram");
     assert!(graph.left() < 24.0 && graph.bottom() < info.top(), "graph and info do not overlap: {graph:?} {info:?}");
+    assert!(graph.width() <= 135.0, "the default graph should leave the photo visible: {graph:?}");
+    let r = h.request("ui.clickWidget", json!({"id":"mobileHistogram:expand"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    let detailed = widget(&h, "mobileHistogram:graph").expect("expanded histogram");
+    let info = widget(&h, "canvas:infoOverlay").expect("info beneath expanded histogram");
+    assert!(detailed.width() > graph.width() && detailed.bottom() < info.top(), "expanded graph and info: {detailed:?} {info:?}");
+    let r = h.request("ui.clickWidget", json!({"id":"mobileHistogram:expand"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert!(widget(&h, "mobileHistogram:graph").is_some_and(|r| r.width() <= 135.0));
     assert!(h.app.ui.histogram);
     let r = h.request("ui.clickWidget", json!({"id":"mobileHistogram:graph"}), SETTLE);
     assert_eq!(r["ok"], true, "{r}");
@@ -120,6 +131,27 @@ fn phone_histogram_toggles_on_photo_without_changing_desktop_preference() {
     desktop.settle(SETTLE);
     assert!(widget(&desktop, "mobileHistogram:toggle").is_none());
     assert!(widget(&desktop, "histogram").is_some(), "desktop Edit histogram is unchanged");
+}
+
+#[test]
+fn phone_histogram_expansion_keeps_mask_rail_and_photo_info_separate() {
+    for size in [[360.0, 740.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        h.app.run("view.infoOverlay", json!({"mode": "basic"})).unwrap();
+        h.app.run("panel.masking", json!({})).unwrap();
+        h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
+        h.step();
+        for control in ["mobileHistogram:toggle", "mobileHistogram:expand"] {
+            let r = h.request("ui.clickWidget", json!({"id":control}), SETTLE);
+            assert_eq!(r["ok"], true, "{control} at {size:?}: {r}");
+            h.step();
+        }
+        let graph = widget(&h, "mobileHistogram:graph").expect("expanded graph");
+        let info = widget(&h, "canvas:infoOverlay").expect("info");
+        let rail = widget(&h, "mobileMaskRail:add").expect("mask rail");
+        assert!(graph.bottom() < info.top(), "histogram must leave photo info legible at {size:?}");
+        assert!(graph.right() < rail.left(), "histogram must not cover mask actions at {size:?}");
+    }
 }
 
 #[test]

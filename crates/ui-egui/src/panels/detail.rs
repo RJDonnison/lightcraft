@@ -744,7 +744,14 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     }
     let map = CanvasMap::new(&frame, img_rect);
     let phone_histogram = compact && crate::widgets::touch_screen(ui.ctx()) && !fullscreen;
-    info_overlay(app, &p, canvas, &photo, if phone_histogram { if app.ui.mobile_histogram { 108.0 } else { 48.0 } } else { 0.0 });
+    let histogram_expanded = ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("mobile-histogram-expanded")).unwrap_or(false));
+    info_overlay(
+        app,
+        &p,
+        canvas,
+        &photo,
+        if phone_histogram { if app.ui.mobile_histogram { if histogram_expanded { 108.0 } else { 80.0 } } else { 48.0 } } else { 0.0 },
+    );
     if !fullscreen {
         filter_pill(app, ui, canvas);
     }
@@ -874,15 +881,44 @@ fn touch_original_hold(ui: &egui::Ui, resp: &egui::Response) -> (bool, bool) {
 
 /// An independent phone preference: the desktop Edit histogram remains where it was.
 fn mobile_histogram(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, id: PhotoId) {
+    let expanded_id = egui::Id::new("mobile-histogram-expanded");
     egui::Area::new(egui::Id::new("mobile-histogram-area")).order(egui::Order::Foreground).fixed_pos(canvas.min + vec2(8.0, 8.0)).show(ctx, |ui| {
         if app.ui.mobile_histogram {
-            ui.set_width(canvas.width().clamp(44.0, 190.0));
-            super::edit::histogram(app, ui, id, true);
+            let expanded = ui.ctx().data(|d| d.get_temp::<bool>(expanded_id).unwrap_or(false));
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.set_width(canvas.width().clamp(44.0, if expanded { 238.0 } else { 182.0 }));
+                ui.vertical(|ui| {
+                    ui.set_width((canvas.width() - 48.0).clamp(44.0, if expanded { 190.0 } else { 134.0 }));
+                    super::edit::histogram(app, ui, id, true, !expanded);
+                });
+                let r = ui.add_sized([44.0, 44.0], egui::Button::new(""));
+                register(ui.ctx(), "mobileHistogram:expand", r.rect);
+                r.widget_info(|| {
+                    egui::WidgetInfo::selected(
+                        egui::WidgetType::Button,
+                        true,
+                        expanded,
+                        crate::i18n::tr(if expanded { "Less histogram detail" } else { "More histogram detail" }),
+                    )
+                });
+                crate::icons::paint(
+                    ui.painter(),
+                    r.rect.shrink(11.0),
+                    if expanded { crate::icons::Icon::ChevronLeft } else { crate::icons::Icon::ChevronRight },
+                    Tokens::get(ui.ctx()).text,
+                );
+                if r.on_hover_text(crate::i18n::tr(if expanded { "Less histogram detail" } else { "More histogram detail" })).clicked() {
+                    ui.ctx().data_mut(|d| d.insert_temp(expanded_id, !expanded));
+                }
+            });
         } else {
             let r = ui.add_sized([44.0, 44.0], egui::Button::new(""));
             register(ui.ctx(), "mobileHistogram:toggle", r.rect);
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::i18n::tr("Show color histogram")));
             crate::icons::paint(ui.painter(), r.rect.shrink(10.0), crate::icons::Icon::Curve, Tokens::get(ui.ctx()).text);
             if r.on_hover_text(crate::i18n::tr("Show color histogram")).clicked() {
+                ui.ctx().data_mut(|d| d.insert_temp(expanded_id, false));
                 app.ui.mobile_histogram = true;
             }
         }

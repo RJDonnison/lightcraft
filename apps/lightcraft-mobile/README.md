@@ -47,8 +47,9 @@ orientation, iPad Split View and phone browsers:
   wrapped Light, Color, Effects, Detail, Optics and Calibration categories,
   with Curve under Light and Grading under Color. Curve opens a larger focused workspace over
   the photo in portrait or beside it in landscape; Done returns to the Edit sheet. A button at
-  the photo's upper left shows the RGB histogram over the photo; tap the graph to hide it. The
-  phone overlay starts hidden and does not affect the desktop histogram. Crop separates
+  the photo's upper left shows a small RGB histogram over the photo; the adjacent button reveals
+  a wider graph with exposure detail, and tapping the graph hides it. The phone overlay starts
+  hidden and does not affect the desktop histogram. Crop separates
   aspect/straightening controls from Geometry,
   with visual aspect cards and larger visible corner and edge handles. Common ratios and
   straightening appear first; More crop options holds custom ratios, precise angle, rotation,

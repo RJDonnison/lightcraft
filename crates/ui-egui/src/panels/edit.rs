@@ -96,7 +96,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let preview_only = app.session.catalog.photo(id).and_then(|p| p.preview_only.clone());
 
     if app.ui.histogram && focus.is_none() {
-        histogram(app, ui, id, false);
+        histogram(app, ui, id, false, false);
     }
     if app.ui.soft_proof && focus.is_none() {
         soft_proofing(app, ui, id);
@@ -625,7 +625,7 @@ fn section(
 
 // ------------------------------------------------------------------------------ histogram
 
-pub(super) fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, mobile_overlay: bool) {
+pub(super) fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, mobile_overlay: bool, compact_overlay: bool) {
     let t = Tokens::get(ui.ctx());
     let w = ui.available_width();
     // the loupe render of this photo, else its thumbnail (grid view before the loupe has rendered it)
@@ -639,14 +639,20 @@ pub(super) fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId,
     // an HDR edit's histogram (`pipeline::hdr_histogram`) gets a colour bar and an SDR / HDR label
     // row under the plot
     let hdr = hist.as_ref().and_then(|h| h.hdr);
-    let legend = if hdr.is_some() { 26.0 } else { 0.0 };
+    let legend = if hdr.is_some() { if compact_overlay { 18.0 } else { 26.0 } } else { 0.0 };
     // lower in the compact layout's sheet, which has little height for the sliders
-    let h = if super::compact::is_compact(ui.ctx()) { 64.0 } else { 118.0 };
+    let h = if compact_overlay {
+        52.0
+    } else if super::compact::is_compact(ui.ctx()) {
+        64.0
+    } else {
+        118.0
+    };
     let (r, resp) = ui.allocate_exact_size(vec2(w, h + legend), Sense::click());
     register(ui.ctx(), if mobile_overlay { "mobileHistogram:graph" } else { "histogram" }, r);
     let p = ui.painter();
     p.rect_filled(r, 0.0, t.button);
-    let plot = Rect::from_min_max(r.min + vec2(0.0, 6.0), pos2(r.right(), r.bottom() - 26.0 - legend));
+    let plot = Rect::from_min_max(r.min + vec2(0.0, 6.0), pos2(r.right(), r.bottom() - if compact_overlay { 8.0 } else { 26.0 } - legend));
     if let Some(b) = hdr {
         // white for SDR, then one band per stop above SDR white: white too, or (Visualize HDR
         // range on) in its colours
@@ -662,7 +668,7 @@ pub(super) fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId,
             let (a, z) = (x0 + (plot.right() - x0) * k as f32 / stops as f32, x0 + (plot.right() - x0) * (k + 1) as f32 / stops as f32);
             bar(a + 1.0, z - 1.0, Color32::from_rgb(c[0], c[1], c[2]));
         }
-        let y = plot.bottom() + 18.0;
+        let y = plot.bottom() + if compact_overlay { 14.0 } else { 18.0 };
         p.text(pos2((plot.left() + x0) / 2.0, y), Align2::CENTER_CENTER, crate::i18n::tr("SDR"), t.font(12.5), t.text_label);
         p.text(pos2((x0 + plot.right()) / 2.0, y), Align2::CENTER_CENTER, crate::i18n::tr("HDR"), t.font(12.5), t.text_label);
         let info = Rect::from_center_size(pos2(plot.right() - 16.0, y), vec2(14.0, 14.0));
@@ -744,7 +750,7 @@ pub(super) fn histogram(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId,
         }
     }
     // EXIF strip
-    if let Some(ph) = app.session.catalog.photo(id) {
+    if !compact_overlay && let Some(ph) = app.session.catalog.photo(id) {
         let m = &ph.meta;
         let parts: Vec<String> = [
             m.iso.map(|i| format!("ISO {i}")),
