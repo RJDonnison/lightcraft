@@ -257,21 +257,42 @@ fn phone_device_photos_browse_previews_without_import_then_switch_to_edits() {
     };
     let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
     app.ui.view = ViewMode::PhotoGrid;
+    let album = app.run("album.create", json!({"name":"Phone albums"})).expect("create a catalog album")["id"].as_u64().expect("album id");
     let catalog_count = app.session.catalog.photos().count();
     let mut h = Headless::new(app, [390.0, 844.0], 1.0);
     h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
     h.settle(SETTLE);
-    let r = h.request("ui.clickWidget", json!({"id":"icon:sidebar"}), SETTLE);
-    assert_eq!(r["ok"], true, "{r}");
-    let r = h.request("ui.clickWidget", json!({"id":"source:devicePhotos"}), SETTLE);
-    assert_eq!(r["ok"], true, "{r}");
     assert!(widget(&h, "galleryTab:Device Photos").is_some());
+    assert!(widget(&h, "galleryTab:My Edits").is_some());
+    assert!(widget(&h, "galleryTab:Library").is_some());
+    let r = h.request("ui.clickWidget", json!({"id":"galleryTab:Device Photos"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(widget(&h, "icon:edit").is_none(), "device browsing cannot edit a stale catalog selection");
     assert!(widget(&h, "devicePhoto:42").is_some());
+    let cell = widget(&h, "devicePhoto:42").expect("gallery cell");
+    let label = widget(&h, "devicePhotoLabel:42").expect("clipped filename area");
+    assert!(cell.contains_rect(label), "filename stays within its own cell");
     assert_eq!(h.app.session.catalog.photos().count(), catalog_count, "previews are not imported photos");
     let r = h.request("ui.clickWidget", json!({"id":"galleryTab:My Edits"}), SETTLE);
     assert_eq!(r["ok"], true, "{r}");
     assert!(!h.app.ui.device_gallery);
     assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::MyEdits);
+    let r = h.request("ui.clickWidget", json!({"id":"galleryTab:Library"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(h.app.ui.library_home);
+    assert!(widget(&h, "source:all").is_some(), "catalog sources are under Library");
+    assert!(widget(&h, &format!("source:album:{album}")).is_some(), "albums are under Library");
+    assert!(widget(&h, "button:libraryImport").is_some(), "manual import remains available");
+    let r = h.request("ui.clickWidget", json!({"id":"source:all"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(!h.app.ui.library_home);
+    assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::All);
+    let r = h.request("ui.clickWidget", json!({"id":"galleryTab:Library"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    let r = h.request("ui.clickWidget", json!({"id":format!("source:album:{album}")}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    assert!(!h.app.ui.library_home);
+    assert_eq!(h.app.session.source, lightcraft_engine::LibrarySource::Album(lightcraft_catalog::AlbumId(album)));
     assert!(requests.lock().unwrap().is_empty() || requests.lock().unwrap().as_slice() == [0]);
 }
 
@@ -378,6 +399,9 @@ fn device_gallery_permission_revocation_clears_cached_previews() {
     revoked.store(true, Ordering::Relaxed);
     h.step();
     assert!(widget(&h, "devicePhoto:7").is_none(), "revocation removes stale previews");
+    assert!(widget(&h, "gallery:retry").is_some(), "permission state offers an actionable retry");
+    let r = h.request("ui.clickWidget", json!({"id":"gallery:retry"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
 }
 
 #[test]

@@ -502,6 +502,9 @@ pub struct UiState {
     /// Transient phone-only Android device gallery tab; not part of saved desktop workspace.
     #[serde(skip)]
     pub device_gallery: bool,
+    /// Transient phone-only Library tab: catalog sources and albums rather than the photo grid.
+    #[serde(skip)]
+    pub library_home: bool,
     pub right: RightPanel,
     /// Widths of the left sidebar and of the right panel in points (dragging their inner edge
     /// resizes them; within [`LEFT_WIDTH`] / [`RIGHT_WIDTH`]).
@@ -1051,6 +1054,7 @@ impl Default for UiState {
             view: ViewMode::Detail,
             left_panel: false,
             device_gallery: false,
+            library_home: false,
             left_width: LEFT_WIDTH.default,
             right_width: RIGHT_WIDTH.default,
             right: RightPanel::Edit,

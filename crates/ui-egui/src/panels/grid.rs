@@ -50,13 +50,11 @@ pub struct GridStats {
 
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t0 = web_time::Instant::now();
-    if super::compact::is_compact(ui.ctx())
-        && crate::widgets::touch_screen(ui.ctx())
-        && app.services.device_gallery.is_some()
-        && (app.ui.device_gallery || app.session.source == lightcraft_engine::LibrarySource::MyEdits)
-    {
+    if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) && app.services.device_gallery.is_some() {
         super::device_gallery::tabs(app, ui);
-        if app.ui.device_gallery {
+        if app.ui.library_home {
+            super::left::mobile_library(app, ui);
+        } else if app.ui.device_gallery {
             super::device_gallery::show(app, ui);
         } else {
             show_inner(app, ui);
@@ -205,6 +203,8 @@ fn show_inner(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             );
         } else if app.session.source == lightcraft_engine::LibrarySource::Folder {
             super::empty_message(ui, ui.max_rect(), "No photos in this folder", "Turn on Include subfolders, or pick another folder under Local");
+        } else if app.session.source == lightcraft_engine::LibrarySource::MyEdits {
+            super::empty_message(ui, ui.max_rect(), "No edits yet", "Open a device photo and adjust it to see it here.");
         } else {
             let how = if crate::widgets::touch_screen(ui.ctx()) {
                 "Import photos with Menu → File → Import Photos… or Import from Folder…"

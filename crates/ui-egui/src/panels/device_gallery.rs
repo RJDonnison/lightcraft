@@ -27,21 +27,27 @@ pub struct State {
 
 pub fn tabs(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        let tab_width = (ui.available_width() / 2.0 - 4.0).max(44.0);
-        for (label, device) in [("Device Photos", true), ("My Edits", false)] {
-            let response = ui.add_sized([tab_width, 44.0], egui::Button::new(label).selected(app.ui.device_gallery == device));
+        let tab_width = ((ui.available_width() - 12.0) / 3.0).max(44.0);
+        for (label, device, library) in [("Device Photos", true, false), ("My Edits", false, false), ("Library", false, true)] {
+            let selected = if library { app.ui.library_home } else { !app.ui.library_home && app.ui.device_gallery == device };
+            let response = ui.add_sized([tab_width, 44.0], egui::Button::new(label).selected(selected));
             register(ui.ctx(), format!("galleryTab:{label}"), response.rect);
             if response.clicked() {
-                if device {
+                if library {
+                    app.ui.device_gallery = false;
+                    app.ui.library_home = true;
+                } else if device {
                     if !app.ui.device_gallery {
                         app.caches.device_photos = State::default();
                     }
                     app.ui.device_gallery = true;
+                    app.ui.library_home = false;
                     app.ui.view = ViewMode::PhotoGrid;
                 } else if let Err(err) = app.run("library.source", json!({"kind":"myEdits"})) {
                     app.toast(ui.ctx(), err);
                 } else {
                     app.ui.device_gallery = false;
+                    app.ui.library_home = false;
                 }
             }
         }
@@ -97,6 +103,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                         let _ = app.run("library.source", json!({"kind":"all"}));
                         app.session.selection = Selection::single(PhotoId(id));
                         app.ui.device_gallery = false;
+                        app.ui.library_home = false;
                         app.ui.view = ViewMode::Detail;
                     } else {
                         app.toast(&ctx, "Photo is already in the library. Open it from All Photos.");
@@ -111,7 +118,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     if state.items.is_empty() || state.message.is_some() {
         if let Some(message) = &state.message {
             ui.label(message);
-            if ui.add_sized([140.0, 44.0], egui::Button::new("Allow Photos / Retry")).clicked() {
+            let retry = ui.add_sized([164.0, 44.0], egui::Button::new("Allow Photos / Retry"));
+            register(ui.ctx(), "gallery:retry", retry.rect);
+            if retry.clicked() {
                 state.message = None;
                 state.requested = false;
             }
@@ -140,7 +149,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     if let Some(texture) = &item.texture {
                         ui.painter().image(texture.id(), image_rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                     }
-                    ui.painter().text(
+                    let label_rect = Rect::from_min_max(pos2(rect.left() + 2.0, image_rect.bottom() + 4.0), pos2(rect.right() - 2.0, rect.bottom()));
+                    register(ui.ctx(), format!("devicePhotoLabel:{}", item.id), label_rect);
+                    ui.painter().with_clip_rect(label_rect).text(
                         pos2(rect.left() + 2.0, image_rect.bottom() + 4.0),
                         egui::Align2::LEFT_TOP,
                         &item.name,

@@ -692,20 +692,23 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 
 /// A phone's library drawer: catalog-wide views first, then the album tree. The same catalog
 /// sources and album commands drive the desktop sidebar and this view.
-fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
+pub(super) fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Frame::NONE.fill(t.chrome).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         ui.horizontal(|ui| {
-            ui.heading(crate::i18n::tr("My Photos"));
+            ui.heading(crate::i18n::tr(if app.ui.library_home { "Library" } else { "My Photos" }));
             if let Some(name) = crate::panels::settings::open_library_name(app) {
                 ui.label(egui::RichText::new(name).color(t.text_dim).small());
             }
         });
         let device_selected = app.ui.device_gallery;
-        if app.services.device_gallery.is_some() && row(app, ui, "devicePhotos", Icon::Photos, "Device Photos", None, device_selected, 0.0).clicked()
+        if !app.ui.library_home
+            && app.services.device_gallery.is_some()
+            && row(app, ui, "devicePhotos", Icon::Photos, "Device Photos", None, device_selected, 0.0).clicked()
         {
             app.ui.device_gallery = true;
+            app.ui.library_home = false;
             app.caches.device_photos = super::device_gallery::State::default();
             app.ui.left_panel = false;
             app.ui.view = crate::state::ViewMode::PhotoGrid;
@@ -724,7 +727,6 @@ fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             let source = app.session.source;
             for (id, icon, label, count, target) in [
                 ("all", Icon::Photos, "All Photos", Some(counts.total), LibrarySource::All),
-                ("myEdits", Icon::Pencil, "My Edits", None, LibrarySource::MyEdits),
                 ("recentlyAdded", Icon::Clock, "Recently Added", None, LibrarySource::RecentlyAdded),
                 ("picks", Icon::FlagPick, "Picks", Some(counts.picks), LibrarySource::Picks),
                 ("recentlyDeleted", Icon::Trash, "Recently Deleted", Some(counts.deleted), LibrarySource::RecentlyDeleted),
@@ -734,6 +736,7 @@ fn mobile_library(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                         app.toast(ui.ctx(), e);
                     } else {
                         app.ui.device_gallery = false;
+                        app.ui.library_home = false;
                         app.ui.left_panel = false;
                     }
                 }
@@ -1275,6 +1278,7 @@ fn albums_tree(app: &mut LightcraftApp, ui: &mut egui::Ui, all: &AlbumKids, pare
                     app.toast(ui.ctx(), e);
                 } else if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
                     app.ui.device_gallery = false;
+                    app.ui.library_home = false;
                     app.ui.left_panel = false;
                 }
             }

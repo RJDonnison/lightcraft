@@ -622,6 +622,13 @@ pub fn run(mut options: eframe::NativeOptions, library_dir: std::path::PathBuf) 
             }
             memory::configure(&mut s, &_cc.egui_ctx);
             let mut app = LightcraftApp::new(s, services(export_dir));
+            #[cfg(target_os = "android")]
+            {
+                // A phone starts at its accessible gallery. Catalog views remain one tab away;
+                // browsing here does not copy originals or modify the library.
+                app.ui.view = lightcraft_ui_egui::state::ViewMode::PhotoGrid;
+                app.ui.device_gallery = true;
+            }
             if let Some(port) = control_port() {
                 app = app.with_control(control_server::start(port, _cc.egui_ctx.clone()));
             }

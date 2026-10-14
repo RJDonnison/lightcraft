@@ -104,7 +104,15 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     topbar(app, ui);
     mobile_export_dialog(app, ui.ctx());
     super::library_problem::banner(app, ui);
-    bottombar(app, ui);
+    // Device browsing and the Library home do not operate on the catalog's current selection.
+    // The catalog-specific Select/Edit/Organize bar would act on a different photo here.
+    let device_home = app.services.device_gallery.is_some()
+        && crate::widgets::touch_screen(ui.ctx())
+        && matches!(app.ui.view, ViewMode::PhotoGrid | ViewMode::SquareGrid)
+        && (app.ui.device_gallery || app.ui.library_home);
+    if !device_home {
+        bottombar(app, ui);
+    }
     if app.ui.left_panel {
         // picking a source (album, folder, date …) closes the drawer onto its photos
         let source = app.session.source;
@@ -124,13 +132,18 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let editor = crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail;
+    let gallery_home =
+        app.services.device_gallery.is_some() && crate::widgets::touch_screen(ui.ctx()) && (app.ui.device_gallery || app.ui.library_home);
     egui::Panel::top("top_bar")
         .exact_size(t.top_bar_h + 4.0)
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin { left: BAR_MARGIN, right: BAR_MARGIN, top: 0, bottom: 0 }))
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                if !editor && icon_button(ui, "sidebar", Icon::Sidebar, BUTTON, app.ui.left_panel, true, "Show/hide My Photos panel").clicked() {
+                if !editor
+                    && !gallery_home
+                    && icon_button(ui, "sidebar", Icon::Sidebar, BUTTON, app.ui.left_panel, true, "Show/hide My Photos panel").clicked()
+                {
                     let _ = app.run("view.leftPanel", json!({}));
                 }
                 if icon_button(ui, "back", Icon::Back, BUTTON, false, true, "Back").clicked() {
@@ -155,7 +168,7 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                         let _ = app.run("dialog.export", json!({}));
                     }
                 }
-                if !editor {
+                if !editor && !gallery_home {
                     let filtering = app.session.filter != Default::default() || app.ui.filter_bar;
                     if icon_button(&mut right, "filter", Icon::Filter, BUTTON, filtering, true, "Filter bar").clicked() {
                         let _ = app.run("view.filterBar", json!({}));
@@ -168,7 +181,7 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     register(right.ctx(), "indicator:unsaved", r);
                     resp.on_hover_text(format!("{n} unsaved: {e}"));
                 }
-                if !editor {
+                if !editor && !gallery_home {
                     right.add_space(4.0);
                     let field = right.available_rect_before_wrap();
                     if field.width() >= 80.0 {
