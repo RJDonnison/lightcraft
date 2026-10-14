@@ -1080,6 +1080,24 @@ fn phone_crop_keeps_precision_controls_available_without_repeating_them_by_defau
 }
 
 #[test]
+fn phone_masking_keeps_the_photo_visible_until_a_mask_has_adjustments() {
+    for size in [[360.0, 740.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        h.app.run("panel.masking", json!({})).unwrap();
+        h.settle(SETTLE);
+        assert!(widget(&h, "mobileMaskRail:add").is_some());
+        assert!(widget(&h, "panel:sheet").is_none(), "no selected mask has adjustments to show");
+        let add = h.request("ui.clickWidget", json!({"id":"mobileMaskRail:add"}), SETTLE);
+        assert_eq!(add["ok"], true, "{add}");
+        assert!(widget(&h, "maskNew:linear").is_some(), "creation remains in the photo-side rail");
+        h.app.run("mask.add", json!({"kind":"linear"})).unwrap();
+        h.settle(SETTLE);
+        assert!(widget(&h, "panel:sheet").is_some(), "selecting a mask reveals its adjustment sheet");
+        assert!(widget(&h, "mobileMask:Light").is_some());
+    }
+}
+
+#[test]
 fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     h.app.run("panel.masking", json!({})).unwrap();

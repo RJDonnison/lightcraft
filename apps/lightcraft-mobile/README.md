@@ -58,9 +58,10 @@ orientation, iPad Split View and phone browsers:
   flips and overlays. Drag a handle to resize or drag inside the frame to move it. Masking puts
   effective white-on-black previews, creation, selection, visibility, overlay and component
   management beside the photo. Tap a mask preview to select it; hold it to manage that mask
-  (or use its context action / Shift+F10 with a keyboard). The lower sheet shows only the selected mask's
-  Light/Color/Effects/Detail adjustments. Remove puts the shared Brush Size and Feather controls
-  before its own Opacity and correction actions, and shows a continuous preview while painting.
+  (or use its context action / Shift+F10 with a keyboard). The lower sheet shows only the selected
+  mask's Light/Color/Effects/Detail adjustments; with no mask selected it stays out of the way
+  so the photo and the rail's Add control remain visible. Remove puts the shared Brush Size and
+  Feather controls before its own Opacity and correction actions, and shows a continuous preview while painting.
   Remove marks the selected correction's target and source separately on the photo, with
   finger-sized hit targets: tap to select, drag a marker to move it, and paint away from markers
   to add a correction.

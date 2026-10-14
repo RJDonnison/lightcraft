@@ -127,7 +127,14 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     } else if sheet_open(app) {
         if super::edit::mobile_curve_active(app, ui.ctx()) {
             super::edit::mobile_curve_workspace(app, ui.ctx(), ui.available_rect_before_wrap());
-        } else {
+        } else if !(crate::widgets::touch_screen(ui.ctx())
+            && app.ui.view == ViewMode::Detail
+            && app.ui.right == RightPanel::Masking
+            && !app.ui.presets
+            && app.session.active_mask.is_none())
+        {
+            // Until a mask is selected there are no adjustments: the photo-side Add/selection
+            // rail is the only useful control. Leave the image visible instead of an empty sheet.
             sheet(app, ui);
         }
     }
