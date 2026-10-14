@@ -39,7 +39,7 @@ fn list(s: &Session) -> Value {
 }
 
 /// Params that describe a destination or a selection, not the export settings.
-const NOT_SETTINGS: &[&str] = &["ids", "path", "dir", "preset"];
+const NOT_SETTINGS: &[&str] = &["ids", "path", "dir", "preset", "mobileCreator", "mobileCopyright"];
 
 fn save(s: &mut Session, p: &Value) -> Result<Value> {
     const ID: &str = "export.savePreset";

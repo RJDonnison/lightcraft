@@ -459,15 +459,28 @@ pub fn default_export_dir(services: &crate::Services) -> String {
 /// [`lightcraft_engine::export::ExportOptions::from_json`], plus `dir` (output folder) or `path`
 /// (exact output file, single photo), `ids` (default: the selection, else the active photo).
 pub fn export_active(app: &mut LightcraftApp, p: &Value) -> Result<Value, String> {
-    use lightcraft_engine::export::{Destination, ExportOptions, export_batch};
+    use lightcraft_engine::export::{Destination, ExportIdentity, ExportOptions, export_batch};
     let mobile = p.get("mobileDestination") == Some(&Value::Bool(true));
     if mobile && app.services.mobile_export.is_none() {
         return Err("mobile gallery export is unavailable".into());
     }
     let mut request = p.clone();
+    let mut identity = None;
     if let Some(map) = request.as_object_mut() {
         map.remove("mobileDestination");
+        let creator = map.remove("mobileCreator");
+        let copyright = map.remove("mobileCopyright");
         if mobile {
+            let field = |name: &str, value: Option<Value>| -> Result<String, String> {
+                match value {
+                    None => Ok(String::new()),
+                    Some(Value::String(s)) if s.len() <= 2048 && s.chars().count() <= 256 && !s.contains('\0') => Ok(s.trim().to_string()),
+                    _ => Err(format!("{name} must be text of at most 256 characters")),
+                }
+            };
+            let creator = field("Creator", creator)?;
+            let copyright = field("Copyright", copyright)?;
+            identity = Some(ExportIdentity { creator, copyright });
             map.remove("path");
             map.insert("dir".into(), json!(default_export_dir(&app.services)));
             map.insert("background".into(), json!(true));
@@ -523,7 +536,7 @@ pub fn export_active(app: &mut LightcraftApp, p: &Value) -> Result<Value, String
     let background = p.get("background").and_then(Value::as_bool).unwrap_or(false)
         && (if mobile { app.services.mobile_export.is_some() } else { app.services.write_shared.is_some() });
     let out = if background {
-        let items = lightcraft_engine::export::prepare_batch(&mut app.session, &ids, &opts)?;
+        let items = lightcraft_engine::export::prepare_batch_with_identity(&mut app.session, &ids, &opts, identity.as_ref())?;
         crate::export_task::start(app, items, opts, to, after, mobile)?
     } else {
         let w = app.services.write.as_mut().ok_or("no writer")?;
@@ -543,6 +556,10 @@ pub fn export_active(app: &mut LightcraftApp, p: &Value) -> Result<Value, String
         o.remove("ids");
         o.remove("path");
         o.insert("dir".into(), json!(dir));
+        if let Some(identity) = identity {
+            o.insert("mobileCreator".into(), json!(identity.creator));
+            o.insert("mobileCopyright".into(), json!(identity.copyright));
+        }
     }
     app.session.last_export = Some(last);
     let _ = app.session.save_prefs();

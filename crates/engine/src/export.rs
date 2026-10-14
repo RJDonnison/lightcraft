@@ -1479,6 +1479,22 @@ pub fn removes_location(_photo: &lightcraft_catalog::Photo, _catalog: &lightcraf
 /// The metadata to embed for `photo` under `o.metadata` / `o.remove_location`. `None` = embed nothing.
 /// Keywords follow the catalog's keyword list (`Catalog::export_keywords`).
 pub fn export_metadata(photo: &lightcraft_catalog::Photo, catalog: &lightcraft_catalog::Catalog, o: &ExportOptions) -> Option<Metadata> {
+    export_metadata_with_identity(photo, catalog, o, None)
+}
+
+/// Attribution applied to one export without changing the library's photo metadata.
+#[derive(Clone, Debug, Default)]
+pub struct ExportIdentity {
+    pub creator: String,
+    pub copyright: String,
+}
+
+fn export_metadata_with_identity(
+    photo: &lightcraft_catalog::Photo,
+    catalog: &lightcraft_catalog::Catalog,
+    o: &ExportOptions,
+    identity: Option<&ExportIdentity>,
+) -> Option<Metadata> {
     let m = &photo.meta;
     let text = |s: &str| (!s.trim().is_empty()).then(|| s.to_string());
     // copyright info (also under "copyright only"): notice, creator, status, usage terms, info URL
@@ -1493,8 +1509,18 @@ pub fn export_metadata(photo: &lightcraft_catalog::Photo, catalog: &lightcraft_c
     };
     match o.metadata {
         MetadataPolicy::None => return None,
-        MetadataPolicy::Copyright => return Some(out),
-        MetadataPolicy::All | MetadataPolicy::AllExceptCamera => {}
+        MetadataPolicy::Copyright | MetadataPolicy::All | MetadataPolicy::AllExceptCamera => {}
+    }
+    if let Some(identity) = identity {
+        if !identity.creator.is_empty() {
+            out.artist = text(&identity.creator);
+        }
+        if !identity.copyright.is_empty() {
+            out.copyright = text(&identity.copyright);
+        }
+    }
+    if o.metadata == MetadataPolicy::Copyright {
+        return Some(out);
     }
     out.title = text(&m.title);
     out.caption = text(&m.caption);
@@ -1635,13 +1661,23 @@ pub fn prepare_export(
     seq: usize,
 ) -> Result<PreparedExport, String> {
     let guard = std::sync::Arc::new(session.original_guard());
-    prepare_guarded(session, id, o, seq, guard)
+    prepare_guarded(session, id, o, seq, guard, None)
 }
 
 /// [`prepare_export`] for each of `ids` in order (`{seq}` = position, from 1).
 pub fn prepare_batch(session: &mut crate::Session, ids: &[lightcraft_catalog::PhotoId], o: &ExportOptions) -> Result<Vec<PreparedExport>, String> {
+    prepare_batch_with_identity(session, ids, o, None)
+}
+
+/// Prepare exports with optional attribution used for this batch only. The source catalog is unchanged.
+pub fn prepare_batch_with_identity(
+    session: &mut crate::Session,
+    ids: &[lightcraft_catalog::PhotoId],
+    o: &ExportOptions,
+    identity: Option<&ExportIdentity>,
+) -> Result<Vec<PreparedExport>, String> {
     let guard = std::sync::Arc::new(session.original_guard());
-    ids.iter().enumerate().map(|(i, id)| prepare_guarded(session, *id, o, i + 1, guard.clone())).collect()
+    ids.iter().enumerate().map(|(i, id)| prepare_guarded(session, *id, o, i + 1, guard.clone(), identity)).collect()
 }
 
 fn prepare_guarded(
@@ -1650,6 +1686,7 @@ fn prepare_guarded(
     o: &ExportOptions,
     seq: usize,
     guard: std::sync::Arc<crate::originals::OriginalGuard>,
+    identity: Option<&ExportIdentity>,
 ) -> Result<PreparedExport, String> {
     let p = session.catalog.photo(id).ok_or("no such photo")?;
     let file_name = o.file_name_for(p, seq);
@@ -1668,7 +1705,7 @@ fn prepare_guarded(
         let tiled = from.filter(|_| tiles_fit(p, o, session.media.max_tiled_pixels));
         reduced_from = from.filter(|_| tiled.is_none());
         let (w, h) = tiled.unwrap_or((w, h));
-        let meta = export_metadata(p, &session.catalog, o);
+        let meta = export_metadata_with_identity(p, &session.catalog, o, identity);
         let gain_map = o.hdr_output() && o.format == ExportFormat::Jpeg;
         let tiled_photo = tiled.map(|_| p.clone());
         let mut job = session.export_job(id, w, h, o.effective_space(), o.effective_depth())?;
@@ -1688,10 +1725,22 @@ fn prepare_guarded(
         let dng = (o.format == ExportFormat::Dng).then_some(o.dng_compression);
         // the file's bytes; a DNG also decodes the raw data (16-bit samples) and writes it again
         let weight = (p.file_size as usize).saturating_add(if dng.is_some() { full_px.saturating_mul(6) } else { 0 });
+        let packet = if let Some(identity) = identity.filter(|identity| !identity.creator.is_empty() || !identity.copyright.is_empty()) {
+            let mut packet_photo = (**p).clone();
+            if !identity.creator.is_empty() {
+                packet_photo.meta.creator = identity.creator.clone();
+            }
+            if !identity.copyright.is_empty() {
+                packet_photo.meta.copyright = identity.copyright.clone();
+            }
+            crate::sidecar::sidecar_packet_with(&packet_photo, &session.catalog, removes_location(p, &session.catalog, o))
+        } else {
+            crate::sidecar::sidecar_packet_with(p, &session.catalog, removes_location(p, &session.catalog, o))
+        };
         let work = Work::File {
             path: path.clone(),
             read: session.media.file_bytes.clone(),
-            packet: crate::sidecar::sidecar_packet_with(p, &session.catalog, removes_location(p, &session.catalog, o)),
+            packet,
             dng,
             remove_location: removes_location(p, &session.catalog, o),
             label: p.file_name.clone(),
@@ -2344,6 +2393,40 @@ mod tests {
         assert_eq!((back.copyright_marked, back.usage_terms.as_deref()), (Some(true), Some("Editorial use only")));
         assert_eq!(back.copyright_url.as_deref(), Some("https://example.com/rights"));
         assert!(back.gps.is_some());
+    }
+
+    #[test]
+    fn one_batch_attribution_changes_export_bytes_not_library_metadata() {
+        use lightcraft_catalog::{Op, Photo, PhotoId, Source};
+        let mut s = crate::Session::with_demo();
+        let id = *s.visible().first().expect("demo has a photo");
+        let original_creator = s.catalog.photo(id).expect("photo exists").meta.creator.clone();
+        let identity = ExportIdentity { creator: "Ada Camera".into(), copyright: "© Ada".into() };
+        let jpeg = prepare_batch_with_identity(&mut s, &[id], &ExportOptions::from_json(&json!({"format": "jpeg", "longEdge": 64})), Some(&identity))
+            .expect("prepare JPEG")
+            .remove(0)
+            .run()
+            .expect("encode JPEG");
+        let embedded = lightcraft_meta::extract(&jpeg.bytes);
+        assert_eq!(jpeg.width.max(jpeg.height), 64);
+        assert_eq!(embedded.artist.as_deref(), Some("Ada Camera"));
+        assert_eq!(embedded.copyright.as_deref(), Some("© Ada"));
+        assert_eq!(s.catalog.photo(id).expect("photo remains").meta.creator, original_creator);
+
+        let original_bytes = vec![1, 2, 3, 4];
+        s.media.file_bytes = Some(std::sync::Arc::new(move |_| Ok(original_bytes.clone())));
+        let source = Photo::new(PhotoId(99_994), Source::File { path: "virtual.jpg".into() }, "virtual.jpg", "jpeg", 8, 8, "2026-10-01T00:00:00");
+        s.catalog.apply(Op::AddPhoto { photo: Box::new(source) }).expect("add virtual photo");
+        let file =
+            prepare_batch_with_identity(&mut s, &[PhotoId(99_994)], &ExportOptions::from_json(&json!({"format": "original"})), Some(&identity))
+                .expect("prepare original")
+                .remove(0)
+                .run()
+                .expect("copy original");
+        assert_eq!(file.bytes, [1, 2, 3, 4]);
+        let sidecar = String::from_utf8(file.sidecars[0].1.clone()).expect("XMP is UTF-8");
+        assert!(sidecar.contains("Ada Camera") && sidecar.contains("© Ada"), "{sidecar}");
+        assert_eq!(s.catalog.photo(PhotoId(99_994)).expect("original remains").meta.creator, "");
     }
 
     #[test]

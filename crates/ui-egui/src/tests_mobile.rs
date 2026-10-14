@@ -131,8 +131,28 @@ fn phone_export_uses_small_chooser_and_mobile_publisher() {
     assert_eq!(r["ok"], true, "{r}");
     assert!(widget(&h, "mobileExport:submit").is_some());
     assert!(h.app.ui.dialog.is_none(), "the desktop export dialog must remain closed");
+    for id in ["mobileExport:creator", "mobileExport:copyright", "mobileExport:longEdge", "mobileExport:quality"] {
+        assert!(widget(&h, id).is_some(), "phone export exposes {id}");
+    }
+    let r = h.request("ui.clickWidget", json!({"id":"mobileExport:creator"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    let r = h.request("ui.text", json!({"text":"Ada Camera"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    let r = h.request("ui.clickWidget", json!({"id":"mobileExport:copyright"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    let r = h.request("ui.text", json!({"text":"© Ada"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.view.ctx.data_mut(|d| {
+        d.insert_temp(egui::Id::new("mobile-export-long-edge"), 64_i64);
+        d.insert_temp(egui::Id::new("mobile-export-quality"), 72_i64);
+    });
+    h.step();
     let r = h.request("ui.clickWidget", json!({"id":"mobileExport:submit"}), SETTLE);
     assert_eq!(r["ok"], true, "{r}");
+    let last = h.app.session.last_export.as_ref().expect("reusable mobile export settings");
+    assert_eq!((last["mobileCreator"].as_str(), last["mobileCopyright"].as_str()), (Some("Ada Camera"), Some("© Ada")));
+    assert_eq!((last["longEdge"].as_i64(), last["quality"].as_i64()), (Some(64), Some(72)));
+    assert!(h.app.run("export.savePreset", json!({"name":"Phone test"})).is_ok(), "mobile attribution does not invalidate an export preset");
     assert!(h.app.export.is_some(), "export should run as a cancellable background task");
     for _ in 0..200 {
         h.step();
@@ -175,6 +195,31 @@ fn phone_export_reports_publication_failure_without_success() {
     let files = h.app.last_export_result.as_ref().and_then(|v| v["files"].as_array());
     assert!(files.is_some_and(|f| f.iter().any(|entry| entry["error"].as_str().is_some_and(|e| e.contains("Photos storage is full")))));
     assert!(!files.is_some_and(|f| f.iter().any(|entry| entry["path"].is_string())));
+}
+
+#[test]
+fn small_phone_export_only_shows_controls_the_format_supports() {
+    use std::sync::Arc;
+    let services = Services { mobile_export: Some(Arc::new(|_, _| Ok(()))), ..Default::default() };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    app.ui.view = ViewMode::Detail;
+    let mut h = Headless::new(app, [360.0, 740.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    assert_eq!(h.request("ui.clickWidget", json!({"id":"icon:share"}), SETTLE)["ok"], true);
+    let button = widget(&h, "mobileExport:submit").expect("export action");
+    assert!(button.bottom() <= 740.0, "export remains reachable on a small phone: {button:?}");
+    assert!(widget(&h, "mobileExport:quality").is_some());
+    assert!(widget(&h, "mobileExport:longEdge").is_some());
+
+    assert_eq!(h.request("ui.clickWidget", json!({"id":"mobileExport:format"}), SETTLE)["ok"], true);
+    assert_eq!(h.request("ui.clickWidget", json!({"id":"mobileExport:png"}), SETTLE)["ok"], true);
+    assert!(widget(&h, "mobileExport:quality").is_none(), "PNG does not use lossy quality");
+    assert!(widget(&h, "mobileExport:longEdge").is_some());
+    assert_eq!(h.request("ui.clickWidget", json!({"id":"mobileExport:format"}), SETTLE)["ok"], true);
+    assert_eq!(h.request("ui.clickWidget", json!({"id":"mobileExport:original"}), SETTLE)["ok"], true);
+    assert!(widget(&h, "mobileExport:longEdge").is_none(), "originals are not resized");
+    assert!(widget(&h, "mobileExport:quality").is_none());
 }
 
 #[test]

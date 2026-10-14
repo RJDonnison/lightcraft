@@ -154,7 +154,10 @@ orientation, iPad Split View and phone browsers:
   can't hold a whole export (Android's 128–256 MB limits) renders it in tiles too, instead of on
   the CPU. Edits that read the whole photo (spot
   removal, Refine Edges, Auto Mask brushes, subject/background masks) still export smaller.
-- **Export and share:** on Android, the phone Export button offers a compact format chooser.
+ - **Export and share:** on Android, the phone Export button offers a compact format chooser,
+   a long-edge pixel limit for rendered files, quality for JPEG/AVIF/JPEG XL and reusable
+   creator/copyright fields. Attribution applies only to the exported metadata or XMP sidecar;
+   it does not change the library photo. Original and DNG exports keep their full dimensions.
   JPEG, PNG and WebP exports publish to Photos; other formats and XMP sidecars publish to
   Downloads. Original files follow their actual extension. The cancellable background export
   reports write failures and the published destinations. Android 10+ publishes through
