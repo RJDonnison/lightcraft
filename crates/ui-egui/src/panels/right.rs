@@ -187,12 +187,12 @@ fn crop(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
                     ("4 × 5", "4x5", 22.0, 27.0),
                     ("16 × 9", "16x9", 36.0, 20.0),
                 ] {
-                    let (rect, response) = ui.allocate_exact_size(vec2(80.0, 68.0), Sense::click());
+                    let (rect, response) = ui.allocate_exact_size(vec2(56.0, 52.0), Sense::click());
                     register(ui.ctx(), format!("mobileCrop:{aspect}"), rect);
                     let t = Tokens::get(ui.ctx());
                     let active = current == label || (aspect == "4x5" && current.starts_with("4 × 5"));
                     ui.painter().rect_filled(rect, 5.0, if active { t.cell_selected } else { t.chrome });
-                    let outline = Rect::from_center_size(pos2(rect.center().x, rect.top() + 24.0), vec2(width, height));
+                    let outline = Rect::from_center_size(pos2(rect.center().x, rect.top() + 19.0), vec2(width, height));
                     ui.painter().rect_stroke(
                         outline,
                         1.0,
@@ -217,103 +217,118 @@ fn crop(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
             );
         });
     }
-    padded(ui, |ui| {
-        ui.horizontal(|ui| {
-            if !mobile {
-                ui.label(crate::i18n::tr("Aspect Ratio"));
+    let advanced_id = egui::Id::new("mobile-crop-options");
+    let mut advanced = mobile && ui.ctx().data(|data| data.get_temp::<bool>(advanced_id)).unwrap_or(false);
+    if mobile {
+        padded(ui, |ui| {
+            let label = if advanced { "Fewer crop options" } else { "More crop options" };
+            if text_button(ui, "mobileCropOptions", crate::i18n::tr(label), advanced).clicked() {
+                advanced = !advanced;
+                ui.ctx().data_mut(|data| data.insert_temp(advanced_id, advanced));
             }
-            let cur = aspect_label(app.crop_tool_aspect(), original);
-            let t = Tokens::get(ui.ctx());
-            let r = crate::widgets::dropdown(ui, "cropAspect", crate::i18n::tr(&cur), t.font(12.5), t.text);
-
-            egui::Popup::menu(&r).show(|ui| {
-                for (label, a) in ASPECT_PRESETS {
-                    if ui.button(crate::i18n::tr(label)).clicked() {
-                        let _ = app.run("crop.aspect", json!({"aspect": a}));
-                    }
+        });
+    }
+    if !mobile || advanced {
+        padded(ui, |ui| {
+            ui.horizontal(|ui| {
+                if !mobile {
+                    ui.label(crate::i18n::tr("Aspect Ratio"));
                 }
-                ui.separator();
-                custom_aspect(app, ui);
+                let cur = aspect_label(app.crop_tool_aspect(), original);
+                let t = Tokens::get(ui.ctx());
+                let r = crate::widgets::dropdown(ui, "cropAspect", crate::i18n::tr(&cur), t.font(12.5), t.text);
+
+                egui::Popup::menu(&r).show(|ui| {
+                    for (label, a) in ASPECT_PRESETS {
+                        if ui.button(crate::i18n::tr(label)).clicked() {
+                            let _ = app.run("crop.aspect", json!({"aspect": a}));
+                        }
+                    }
+                    ui.separator();
+                    custom_aspect(app, ui);
+                });
+                let locked = app.crop_tool_aspect().is_some();
+                if text_button(ui, "cropLock", if locked { "Locked" } else { "Lock" }, locked).clicked() {
+                    let _ = app.run("crop.aspect", json!({"aspect": "toggle"}));
+                }
             });
-            let locked = app.crop_tool_aspect().is_some();
-            if text_button(ui, "cropLock", if locked { "Locked" } else { "Lock" }, locked).clicked() {
-                let _ = app.run("crop.aspect", json!({"aspect": "toggle"}));
-            }
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.y = 6.0;
+                if text_button(ui, "cropRotateLeft", crate::i18n::tr("Rotate Left"), false).clicked() {
+                    let _ = app.run("photo.rotateLeft", json!({}));
+                }
+                if text_button(ui, "cropRotateRight", crate::i18n::tr("Rotate Right"), false).clicked() {
+                    let _ = app.run("photo.rotateRight", json!({}));
+                }
+            });
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.y = 6.0;
+                if text_button(ui, "cropFlipH", crate::i18n::tr("Flip H"), d.crop.flip_h).clicked() {
+                    let _ = app.run("photo.flipHorizontal", json!({}));
+                }
+                if text_button(ui, "cropFlipV", crate::i18n::tr("Flip V"), d.crop.flip_v).clicked() {
+                    let _ = app.run("photo.flipVertical", json!({}));
+                }
+                if text_button(ui, "cropSwapAspect", crate::i18n::tr("Swap Aspect (X)"), false).clicked() {
+                    let _ = app.run("crop.rotateAspect", json!({}));
+                }
+                if text_button(ui, "cropReset", crate::i18n::tr("Reset"), false).clicked() {
+                    let _ = app.run("crop.reset", json!({}));
+                }
+            });
         });
-        ui.add_space(6.0);
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.y = 6.0;
-            if text_button(ui, "cropRotateLeft", crate::i18n::tr("Rotate Left"), false).clicked() {
-                let _ = app.run("photo.rotateLeft", json!({}));
-            }
-            if text_button(ui, "cropRotateRight", crate::i18n::tr("Rotate Right"), false).clicked() {
-                let _ = app.run("photo.rotateRight", json!({}));
-            }
-        });
-        ui.add_space(6.0);
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.y = 6.0;
-            if text_button(ui, "cropFlipH", crate::i18n::tr("Flip H"), d.crop.flip_h).clicked() {
-                let _ = app.run("photo.flipHorizontal", json!({}));
-            }
-            if text_button(ui, "cropFlipV", crate::i18n::tr("Flip V"), d.crop.flip_v).clicked() {
-                let _ = app.run("photo.flipVertical", json!({}));
-            }
-            if text_button(ui, "cropSwapAspect", crate::i18n::tr("Swap Aspect (X)"), false).clicked() {
-                let _ = app.run("crop.rotateAspect", json!({}));
-            }
-            if text_button(ui, "cropReset", crate::i18n::tr("Reset"), false).clicked() {
-                let _ = app.run("crop.reset", json!({}));
-            }
-        });
-    });
+    }
     let ang = lightcraft_develop::controls::find("crop.angle").copied();
     if let Some(spec) = ang {
         let out = slider(ui, &spec, d.crop.geometry.angle, true, Some("Straighten"));
         super::edit::apply_slider_out(app, &spec, out, |app, v| app.run("crop.straighten", json!({"angle": v})));
         // an exact angle, typed (issue #534): a field of its own, besides the slider's value
-        padded(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(crate::i18n::tr("Angle"));
-                let mut angle = d.crop.geometry.angle;
-                let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
-                let r = ui.add(
-                    egui::DragValue::new(&mut angle)
-                        .range(spec.min..=spec.max)
-                        .clamp_existing_to_range(false)
-                        .speed(0.05)
-                        .fixed_decimals(2)
-                        // as the readout writes it: "+2.50", and every zero "0.00"
-                        .custom_formatter(|v, _| super::detail::crop_angle_label(v).trim_end_matches('°').to_string())
-                        .suffix("°")
-                        // read as the Straighten value reads a typed one: "-3,25" too
-                        .custom_parser(|text| crate::widgets::typed_value(&spec, text.trim().trim_end_matches('°')))
-                        // a typed angle applies on Return (or leaving the field), not keystroke by
-                        // keystroke: no half-typed angles, one undo step
-                        .update_while_editing(false),
-                );
-                crate::widgets::register(ui.ctx(), "cropAngleField", r.rect);
-                // a drag on the field is one undo step, like the slider's
-                if r.drag_started() {
-                    let _ = app.run("develop.beginInteraction", json!({"label": "Straighten"}));
-                }
-                // egui reports a change while text is typed even when the value isn't updated yet:
-                // apply only a new angle
-                // Esc keeps the old angle, but egui applies the typed text on the frame after the
-                // one where Esc took the focus away: remember the Esc for that frame
-                let cancel = egui::Id::new("cropAngleFieldEscaped");
-                let escaped = ui.data_mut(|m| m.remove_temp::<bool>(cancel)).unwrap_or(false);
-                if escape && r.lost_focus() {
-                    ui.data_mut(|m| m.insert_temp(cancel, true));
-                }
-                if r.changed() && !escaped && angle.is_finite() && angle != d.crop.geometry.angle {
-                    let _ = app.run("crop.straighten", json!({"angle": (angle.clamp(spec.min, spec.max) * 100.0).round() / 100.0}));
-                }
-                if r.drag_stopped() {
-                    let _ = app.run("develop.endInteraction", json!({}));
-                }
+        if !mobile || advanced {
+            padded(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(crate::i18n::tr("Angle"));
+                    let mut angle = d.crop.geometry.angle;
+                    let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+                    let r = ui.add(
+                        egui::DragValue::new(&mut angle)
+                            .range(spec.min..=spec.max)
+                            .clamp_existing_to_range(false)
+                            .speed(0.05)
+                            .fixed_decimals(2)
+                            // as the readout writes it: "+2.50", and every zero "0.00"
+                            .custom_formatter(|v, _| super::detail::crop_angle_label(v).trim_end_matches('°').to_string())
+                            .suffix("°")
+                            // read as the Straighten value reads a typed one: "-3,25" too
+                            .custom_parser(|text| crate::widgets::typed_value(&spec, text.trim().trim_end_matches('°')))
+                            // a typed angle applies on Return (or leaving the field), not keystroke by
+                            // keystroke: no half-typed angles, one undo step
+                            .update_while_editing(false),
+                    );
+                    crate::widgets::register(ui.ctx(), "cropAngleField", r.rect);
+                    // a drag on the field is one undo step, like the slider's
+                    if r.drag_started() {
+                        let _ = app.run("develop.beginInteraction", json!({"label": "Straighten"}));
+                    }
+                    // egui reports a change while text is typed even when the value isn't updated yet:
+                    // apply only a new angle
+                    // Esc keeps the old angle, but egui applies the typed text on the frame after the
+                    // one where Esc took the focus away: remember the Esc for that frame
+                    let cancel = egui::Id::new("cropAngleFieldEscaped");
+                    let escaped = ui.data_mut(|m| m.remove_temp::<bool>(cancel)).unwrap_or(false);
+                    if escape && r.lost_focus() {
+                        ui.data_mut(|m| m.insert_temp(cancel, true));
+                    }
+                    if r.changed() && !escaped && angle.is_finite() && angle != d.crop.geometry.angle {
+                        let _ = app.run("crop.straighten", json!({"angle": (angle.clamp(spec.min, spec.max) * 100.0).round() / 100.0}));
+                    }
+                    if r.drag_stopped() {
+                        let _ = app.run("develop.endInteraction", json!({}));
+                    }
+                });
             });
-        });
+        }
     }
     padded(ui, |ui| {
         ui.horizontal(|ui| {
@@ -329,33 +344,37 @@ fn crop(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
             }
         });
     });
-    padded(ui, |ui| {
-        ui.label(crate::i18n::tr("Overlay"));
-        {
-            use crate::state::CropOverlay as O;
-            let opts = [
-                (O::Thirds, "Thirds", "thirds"),
-                (O::Grid, "Grid", "grid"),
-                (O::Golden, "Golden", "golden"),
-                (O::Diagonal, "Diagonal", "diagonal"),
-                (O::Triangle, "Triangle", "triangle"),
-                (O::Spiral, "Spiral", "spiral"),
-                (O::None, "None", "none"),
-            ];
-            let items: Vec<(&str, &str)> = opts.iter().map(|(_, l, k)| (*l, *k)).collect();
-            let active = opts.iter().position(|(o, _, _)| *o == app.ui.crop_overlay);
-            if let Some(i) = crate::widgets::segmented(ui, "cropOverlay", &items, active, 3) {
-                app.ui.crop_overlay = opts[i].0;
-            }
-            if matches!(app.ui.crop_overlay, O::Triangle | O::Spiral)
-                && text_button(ui, "cropOverlayOrient", crate::i18n::tr("Flip Overlay (⇧O)"), false).clicked()
+    if !mobile || advanced {
+        padded(ui, |ui| {
+            ui.label(crate::i18n::tr("Overlay"));
             {
-                let _ = app.run("view.cropOverlayOrientation", json!({}));
+                use crate::state::CropOverlay as O;
+                let opts = [
+                    (O::Thirds, "Thirds", "thirds"),
+                    (O::Grid, "Grid", "grid"),
+                    (O::Golden, "Golden", "golden"),
+                    (O::Diagonal, "Diagonal", "diagonal"),
+                    (O::Triangle, "Triangle", "triangle"),
+                    (O::Spiral, "Spiral", "spiral"),
+                    (O::None, "None", "none"),
+                ];
+                let items: Vec<(&str, &str)> = opts.iter().map(|(_, l, k)| (*l, *k)).collect();
+                let active = opts.iter().position(|(o, _, _)| *o == app.ui.crop_overlay);
+                if let Some(i) = crate::widgets::segmented(ui, "cropOverlay", &items, active, 3) {
+                    app.ui.crop_overlay = opts[i].0;
+                }
+                if matches!(app.ui.crop_overlay, O::Triangle | O::Spiral)
+                    && text_button(ui, "cropOverlayOrient", crate::i18n::tr("Flip Overlay (⇧O)"), false).clicked()
+                {
+                    let _ = app.run("view.cropOverlayOrientation", json!({}));
+                }
             }
-        }
-    });
-    divider(ui);
-    crop_geometry(app, ui, &d, true);
+        });
+    }
+    if !mobile {
+        divider(ui);
+        crop_geometry(app, ui, &d, true);
+    }
 }
 
 fn crop_geometry(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &lightcraft_develop::DevelopSettings, heading: bool) {

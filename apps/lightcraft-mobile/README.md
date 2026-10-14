@@ -48,8 +48,9 @@ orientation, iPad Split View and phone browsers:
   with Curve under Light and Grading under Color. A button at the photo's upper left shows the
   RGB histogram over the photo; tap the graph to hide it. It starts hidden on phones and does
   not affect the desktop histogram. Crop separates aspect/straightening controls from Geometry,
-  with visual aspect cards and larger visible corner and edge handles. Drag a handle to resize
-  or drag inside the frame to move it; rotation uses the explicit controls. Masking puts
+  with visual aspect cards and larger visible corner and edge handles. Common ratios and
+  straightening appear first; More crop options holds custom ratios, precise angle, rotation,
+  flips and overlays. Drag a handle to resize or drag inside the frame to move it. Masking puts
   effective white-on-black previews, creation, selection, visibility, overlay and component
   management beside the photo. Tap a mask preview to select it; hold it to manage that mask
   (or use its context action / Shift+F10 with a keyboard). The lower sheet shows only the selected mask's

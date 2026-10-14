@@ -830,7 +830,7 @@ fn phone_crop_uses_visual_aspects_separate_geometry_and_large_handles() {
     assert!(widget(&h, "mobileCropTab:Crop").is_some());
     for aspect in ["free", "original", "1x1", "4x5", "16x9"] {
         let rect = widget(&h, &format!("mobileCrop:{aspect}")).expect("visual aspect card");
-        assert!(rect.width() >= 70.0 && rect.height() >= 60.0);
+        assert!(rect.width() >= 56.0 && rect.height() >= 52.0);
     }
     let photo = h.app.session.active().expect("photo");
     let corner = widget(&h, "cropHandle:0").expect("visible corner");
@@ -848,6 +848,36 @@ fn phone_crop_uses_visual_aspects_separate_geometry_and_large_handles() {
     assert_eq!(r["ok"], true, "{r}");
     h.step();
     assert_eq!(h.app.session.develop_of(photo).expect("develop").crop.aspect, Some((100, 100)));
+
+    let mut small = touch_app(ViewMode::Detail, [360.0, 740.0]);
+    small.app.run("panel.crop", json!({})).unwrap();
+    small.settle(SETTLE);
+    let first = widget(&small, "mobileCrop:free").expect("first ratio card");
+    let last = widget(&small, "mobileCrop:16x9").expect("last ratio card");
+    assert!((first.top() - last.top()).abs() < 1.0, "all common ratios fit in one row on a small phone: first={first:?} last={last:?}");
+}
+
+#[test]
+fn phone_crop_keeps_precision_controls_available_without_repeating_them_by_default() {
+    let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
+    h.app.run("panel.crop", json!({})).unwrap();
+    h.settle(SETTLE);
+    assert!(widget(&h, "mobileCrop:1x1").is_some());
+    assert!(widget(&h, "slider:crop.angle").is_some(), "straighten is immediately available");
+    assert!(widget(&h, "dropdown:cropAspect").is_none(), "the common ratios are not repeated by default");
+    assert!(widget(&h, "cropAngleField").is_none(), "exact entry stays behind the precision control");
+    let more = h.request("ui.clickWidget", json!({"id": "button:mobileCropOptions"}), Duration::from_secs(20));
+    assert_eq!(more["ok"], true, "{more}");
+    h.step();
+    assert!(widget(&h, "dropdown:cropAspect").is_some(), "custom ratios remain available");
+    assert!(widget(&h, "cropAngleField").is_some(), "exact angles remain available");
+    assert!(widget(&h, "button:cropRotateLeft").is_some(), "rotation remains reachable");
+    let less = h.request("ui.clickWidget", json!({"id": "button:mobileCropOptions"}), Duration::from_secs(20));
+    assert_eq!(less["ok"], true, "{less}");
+    h.step();
+    h.step();
+    assert!(widget(&h, "dropdown:cropAspect").is_none());
+    assert!(widget(&h, "slider:crop.angle").is_some());
 }
 
 #[test]
