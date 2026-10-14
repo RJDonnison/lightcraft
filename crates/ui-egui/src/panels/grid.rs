@@ -205,6 +205,17 @@ fn show_inner(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             super::empty_message(ui, ui.max_rect(), "No photos in this folder", "Turn on Include subfolders, or pick another folder under Local");
         } else if app.session.source == lightcraft_engine::LibrarySource::MyEdits {
             super::empty_message(ui, ui.max_rect(), "No edits yet", "Open a device photo and adjust it to see it here.");
+            if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) && app.services.device_gallery.is_some() {
+                let rect = Rect::from_center_size(pos2(ui.max_rect().center().x, ui.max_rect().center().y + 90.0), vec2(180.0, 44.0));
+                let button = ui.put(rect, egui::Button::new("Browse Device Photos"));
+                crate::widgets::register(ui.ctx(), "gallery:fromEmptyEdits", button.rect);
+                if button.clicked() {
+                    app.ui.device_gallery = true;
+                    app.ui.library_home = false;
+                    app.ui.view = ViewMode::PhotoGrid;
+                    app.caches.device_photos = super::device_gallery::State::default();
+                }
+            }
         } else {
             let how = if crate::widgets::touch_screen(ui.ctx()) {
                 "Import photos with Menu → File → Import Photos… or Import from Folder…"

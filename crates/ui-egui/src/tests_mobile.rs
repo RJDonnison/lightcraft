@@ -539,6 +539,112 @@ fn device_gallery_permission_revocation_clears_cached_previews() {
 }
 
 #[test]
+fn empty_device_gallery_waits_for_retry_instead_of_querying_each_frame() {
+    use std::sync::{Arc, Mutex};
+
+    let requests = Arc::new(Mutex::new(0usize));
+    let seen = requests.clone();
+    let mut delivered = false;
+    let services = Services {
+        device_gallery: Some(crate::DeviceGallery {
+            request: Box::new(move |_| {
+                *seen.lock().unwrap() += 1;
+                Ok(())
+            }),
+            take_page: Box::new(move || {
+                if delivered {
+                    None
+                } else {
+                    delivered = true;
+                    Some(crate::DevicePage::Photos { offset: 0, photos: Vec::new(), more: false })
+                }
+            }),
+            open: Box::new(|_| Ok(())),
+            take_open: Box::new(|| None),
+        }),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    app.ui.view = ViewMode::PhotoGrid;
+    app.ui.device_gallery = true;
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    let before = *requests.lock().unwrap();
+    for _ in 0..10 {
+        h.step();
+    }
+    assert_eq!(*requests.lock().unwrap(), before, "an empty gallery must not repeatedly query MediaStore");
+    assert!(widget(&h, "gallery:retry").is_some(), "empty gallery offers one recovery action");
+    let r = h.request("ui.clickWidget", json!({"id":"gallery:retry"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert!(*requests.lock().unwrap() > before, "retry starts a fresh query");
+}
+
+#[test]
+fn failed_device_gallery_has_one_explicit_retry_without_background_retry_loop() {
+    use std::sync::{Arc, Mutex};
+
+    let requests = Arc::new(Mutex::new(0usize));
+    let seen = requests.clone();
+    let services = Services {
+        device_gallery: Some(crate::DeviceGallery {
+            request: Box::new(move |_| {
+                let mut count = seen.lock().unwrap();
+                *count += 1;
+                Err("Gallery is temporarily unavailable".into())
+            }),
+            take_page: Box::new(|| None),
+            open: Box::new(|_| Ok(())),
+            take_open: Box::new(|| None),
+        }),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::new(), services);
+    app.ui.view = ViewMode::PhotoGrid;
+    app.ui.device_gallery = true;
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    assert_eq!(*requests.lock().unwrap(), 1);
+    assert!(widget(&h, "gallery:retry").is_some());
+    for _ in 0..10 {
+        h.step();
+    }
+    assert_eq!(*requests.lock().unwrap(), 1, "errors wait for an explicit retry");
+    let r = h.request("ui.clickWidget", json!({"id":"gallery:retry"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert_eq!(*requests.lock().unwrap(), 2);
+}
+
+#[test]
+fn empty_phone_edits_offer_a_direct_path_back_to_device_photos() {
+    let services = Services {
+        device_gallery: Some(crate::DeviceGallery {
+            request: Box::new(|_| Ok(())),
+            take_page: Box::new(|| None),
+            open: Box::new(|_| Ok(())),
+            take_open: Box::new(|| None),
+        }),
+        ..Default::default()
+    };
+    let mut app = LightcraftApp::new(lightcraft_engine::Session::new(), services);
+    app.ui.view = ViewMode::PhotoGrid;
+    app.run("library.source", json!({"kind":"myEdits"})).unwrap();
+    let mut h = Headless::new(app, [390.0, 844.0], 1.0);
+    h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+    h.settle(SETTLE);
+    assert!(widget(&h, "gallery:fromEmptyEdits").is_some());
+    let r = h.request("ui.clickWidget", json!({"id":"gallery:fromEmptyEdits"}), SETTLE);
+    assert_eq!(r["ok"], true, "{r}");
+    h.step();
+    assert!(h.app.ui.device_gallery);
+    assert!(widget(&h, "galleryTab:Device Photos").is_some());
+}
+
+#[test]
 fn phone_presets_show_photo_variants_without_a_hover_or_setting() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     assert!(!h.app.ui.preset_thumbs, "desktop preference stays off");

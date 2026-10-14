@@ -10,6 +10,11 @@ use crate::{DevicePage, LightcraftApp, state::ViewMode, widgets::register};
 
 const PAGE_SIZE: usize = 48;
 
+enum Notice {
+    Permission,
+    Failed(String),
+}
+
 struct Item {
     id: String,
     texture: Option<TextureHandle>,
@@ -21,9 +26,10 @@ pub struct State {
     items: Vec<Item>,
     requested_offset: usize,
     requested: bool,
+    loaded: bool,
     more: bool,
     opening: bool,
-    message: Option<String>,
+    notice: Option<Notice>,
 }
 
 pub fn tabs(app: &mut LightcraftApp, ui: &mut egui::Ui) {
@@ -78,19 +84,24 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     }
                     if appending {
                         state.more = more;
+                        if offset == 0 {
+                            state.loaded = true;
+                        }
                     }
-                    state.message = None;
+                    state.notice = None;
                 }
             }
             DevicePage::PermissionNeeded => {
                 state.items.clear();
                 state.more = false;
-                state.message = Some("Allow photo access to browse Device Photos. Selected-only access shows only selected photos.".into());
+                state.loaded = false;
+                state.notice = Some(Notice::Permission);
             }
             DevicePage::Error(err) => {
                 state.items.clear();
                 state.more = false;
-                state.message = Some(err);
+                state.loaded = false;
+                state.notice = Some(Notice::Failed(err));
             }
         }
     }
@@ -122,19 +133,40 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
         }
     }
     let state = &mut app.caches.device_photos;
-    if state.items.is_empty() || state.message.is_some() {
-        if let Some(message) = &state.message {
-            ui.label(message);
-            let retry = ui.add_sized([164.0, 44.0], egui::Button::new("Allow Photos / Retry"));
+    if state.items.is_empty() || state.notice.is_some() {
+        if let Some(notice) = &state.notice {
+            match notice {
+                Notice::Permission => {
+                    ui.heading("Photo access needed");
+                    ui.label("Allow access to browse Device Photos. Selected-photo access shows only those photos; your existing edits remain in My Edits.");
+                }
+                Notice::Failed(err) => {
+                    ui.heading("Device Photos could not load");
+                    ui.label(err);
+                }
+            }
+            let retry =
+                ui.add_sized([164.0, 44.0], egui::Button::new(if matches!(notice, Notice::Permission) { "Check photo access" } else { "Try again" }));
             register(ui.ctx(), "gallery:retry", retry.rect);
             if retry.clicked() {
-                state.message = None;
+                state.items.clear();
+                state.more = false;
+                state.loaded = false;
+                state.notice = None;
                 state.requested = false;
             }
         } else if state.requested {
             ui.spinner();
         } else {
-            ui.label("No accessible photos yet. Allow access, or add photos using the system picker.");
+            ui.heading("No device photos available");
+            ui.label("This gallery shows the photos Android lets LightCraft access. Check photo access to refresh your selection.");
+            let retry = ui.add_sized([164.0, 44.0], egui::Button::new("Check photo access"));
+            register(ui.ctx(), "gallery:retry", retry.rect);
+            if retry.clicked() {
+                state.requested = false;
+                state.items.clear();
+                state.loaded = false;
+            }
         }
     }
     let mut selected = None;
@@ -185,9 +217,11 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             ui.add_space(row_h);
         }
     });
-    if !state.requested && state.items.is_empty() && state.message.is_none() {
+    if !state.requested && !state.loaded && state.notice.is_none() {
         request_page(app.services.device_gallery.as_mut(), state, 0);
-    } else if let Some(offset) = wanted_offset {
+    } else if state.notice.is_none()
+        && let Some(offset) = wanted_offset
+    {
         request_page(app.services.device_gallery.as_mut(), state, offset);
     }
     if let Some(id) = selected
@@ -198,7 +232,7 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             && let Err(err) = (gallery.open)(&id)
         {
             state.opening = false;
-            state.message = Some(err);
+            state.notice = Some(Notice::Failed(err));
         }
     }
     if state.opening {
@@ -231,11 +265,11 @@ fn request_page(gallery: Option<&mut crate::DeviceGallery>, state: &mut State, o
     if let Some(gallery) = gallery {
         if let Err(err) = (gallery.request)(offset) {
             state.requested = false;
-            state.message = Some(err);
+            state.notice = Some(Notice::Failed(err));
         }
     } else {
         state.requested = false;
-        state.message = Some("Device Photos is unavailable".into());
+        state.notice = Some(Notice::Failed("Device Photos is unavailable".into()));
     }
 }
 

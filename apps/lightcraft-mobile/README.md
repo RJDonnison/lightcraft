@@ -74,6 +74,9 @@ orientation, iPad Split View and phone browsers:
   copies it to `<library>/Picked/Device Photos` once and opens it directly; re-opening keeps its
   existing edits. Full and selected-only gallery grants show only accessible photos. Denied or
   revoked access clears the device thumbnails; edits already in the catalog remain available.
+  Device Photos distinguishes access, loading and query failures, with one retry action; an
+  accessible but empty gallery waits for a manual refresh instead of continuously requerying.
+  When My Edits is empty, Browse Device Photos opens the gallery directly.
   On other compact layouts the My Photos drawer keeps these catalog sources and import actions.
   Create opens the existing album/folder menu. Picking a photo source opens its grid. Removing
   a photo from an album keeps it in All Photos; deleting it moves it to Recently Deleted.
