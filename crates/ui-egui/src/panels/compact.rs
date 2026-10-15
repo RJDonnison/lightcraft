@@ -142,36 +142,49 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 
 fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
-    let editor = crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail;
+    let touch = crate::widgets::touch_screen(ui.ctx());
+    let button = if touch { vec2(44.0, 44.0) } else { BUTTON };
+    let editor = touch && app.ui.view == ViewMode::Detail;
     let gallery_home = app.services.device_gallery.is_some()
         && crate::widgets::touch_screen(ui.ctx())
         && matches!(app.ui.view, ViewMode::PhotoGrid | ViewMode::SquareGrid)
         && (app.ui.device_gallery || app.ui.library_home);
     egui::Panel::top("top_bar")
-        .exact_size(if editor { 44.0 } else { t.top_bar_h + 4.0 })
+        .exact_size(if touch { 48.0 } else { t.top_bar_h + 4.0 })
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin { left: BAR_MARGIN, right: BAR_MARGIN, top: 0, bottom: 0 }))
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 if !editor
                     && !gallery_home
-                    && icon_button(ui, "sidebar", Icon::Sidebar, BUTTON, app.ui.left_panel, true, "Show/hide My Photos panel").clicked()
+                    && icon_button(ui, "sidebar", Icon::Sidebar, button, app.ui.left_panel, true, "Show/hide My Photos panel").clicked()
                 {
                     let _ = app.run("view.leftPanel", json!({}));
                 }
-                if !gallery_home && icon_button(ui, "back", Icon::Back, BUTTON, false, true, "Back").clicked() {
+                if !gallery_home && icon_button(ui, "back", Icon::Back, button, false, true, "Back").clicked() {
                     let _ = app.run("view.back", json!({}));
                 }
                 if !app.native_menu {
                     ui.add_space(4.0);
                     crate::menubar::show_in_window(app, ui, 0.0);
-                    ui.add_space(8.0);
+                    ui.add_space(if touch { 4.0 } else { 8.0 });
+                }
+                if touch {
+                    let title = if editor {
+                        "Photo"
+                    } else if app.ui.device_gallery {
+                        "Device Photos"
+                    } else {
+                        "Library"
+                    };
+                    let label = ui.add(egui::Label::new(egui::RichText::new(crate::i18n::tr(title)).strong()).truncate());
+                    register(ui.ctx(), "compact:contextTitle", label.rect);
                 }
                 // right-to-left from the edge: Export, Filter, then the search field takes the rest
                 let rest = ui.available_rect_before_wrap();
                 let mut right = ui.new_child(egui::UiBuilder::new().max_rect(rest).layout(egui::Layout::right_to_left(egui::Align::Center)));
                 right.spacing_mut().item_spacing.x = 0.0;
-                if !gallery_home && icon_button(&mut right, "share", Icon::Share, BUTTON, false, true, "Export").clicked() {
+                if !gallery_home && icon_button(&mut right, "share", Icon::Share, button, false, true, "Export").clicked() {
                     if crate::widgets::touch_screen(right.ctx()) && app.services.mobile_export.is_some() {
                         right.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile-export-open"), true));
                     } else {
@@ -180,13 +193,13 @@ fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                 }
                 if !editor && !gallery_home {
                     let filtering = app.session.filter != Default::default() || app.ui.filter_bar;
-                    if icon_button(&mut right, "filter", Icon::Filter, BUTTON, filtering, true, "Filter bar").clicked() {
+                    if icon_button(&mut right, "filter", Icon::Filter, button, filtering, true, "Filter bar").clicked() {
                         let _ = app.run("view.filterBar", json!({}));
                     }
                 }
                 // a failing save keeps its warning visible (the desktop's cloud icon)
                 if let Some((n, e)) = app.session.unsaved() {
-                    let (r, resp) = right.allocate_exact_size(BUTTON, Sense::hover());
+                    let (r, resp) = right.allocate_exact_size(button, Sense::hover());
                     paint(right.painter(), r.shrink(10.0), Icon::Cloud, t.caution);
                     register(right.ctx(), "indicator:unsaved", r);
                     resp.on_hover_text(format!("{n} unsaved: {e}"));
@@ -512,7 +525,7 @@ fn mobile_editor_bar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 }
 
 fn mobile_tool(ui: &mut egui::Ui, id: &str, label: &str, icon: Icon, active: bool, width: f32, t: &Tokens) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(width, 44.0), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(vec2(width, 48.0), Sense::click());
     register(ui.ctx(), format!("icon:{id}"), rect);
     if active {
         ui.painter().rect_filled(rect.shrink2(vec2(2.0, 1.0)), 8.0, t.cell_selected);

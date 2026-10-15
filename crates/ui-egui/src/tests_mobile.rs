@@ -120,10 +120,38 @@ fn phone_header_keeps_editor_navigation_but_does_not_export_a_stale_gallery_sele
     assert!(widget(&h, "icon:more").is_some());
     assert!(widget(&h, "menu:all").is_some());
     let top = widget(&h, "icon:back").unwrap();
-    assert!(top.top() >= 0.0 && top.bottom() <= 44.0, "the editor keeps a compact safe header: {top:?}");
+    assert!(top.top() >= 0.0 && top.bottom() <= 48.0, "the editor keeps a compact safe header: {top:?}");
     let r = h.request("ui.clickWidget", json!({"id":"icon:more"}), SETTLE);
     assert_eq!(r["ok"], true, "{r}");
     assert!(widget(&h, "icon:info").is_some(), "secondary tools remain reachable");
+}
+
+#[test]
+fn phone_chrome_has_context_title_and_reachable_menu_and_tools() {
+    for size in [[390.0, 844.0], [844.0, 390.0], [360.0, 740.0]] {
+        let mut h = touch_app(ViewMode::PhotoGrid, size);
+        let title = widget(&h, "compact:contextTitle").expect("Library title");
+        let menu = widget(&h, "menu:all").expect("menu commands");
+        assert!(menu.width() >= 44.0 && menu.height() >= 44.0, "menu is finger-sized at {size:?}");
+        assert!(title.left() >= menu.right() && title.right() < size[0] - 44.0, "title leaves room for actions at {size:?}");
+        let r = h.request("ui.clickWidget", json!({"id":"menu:all"}), SETTLE);
+        assert_eq!(r["ok"], true, "{r}");
+        assert!(widget(&h, "menusub:File").is_some(), "full menu commands remain reachable");
+        h.app.ui.view = ViewMode::Detail;
+        h.settle(SETTLE);
+        let back = widget(&h, "icon:back").expect("Back");
+        let export = widget(&h, "icon:share").expect("Export");
+        let title = widget(&h, "compact:contextTitle").expect("photo title");
+        let editor_menu = h.app.widgets.iter().rev().find(|(id, _)| id == "menu:all").expect("editor menu").1;
+        assert!(
+            back.width() >= 44.0 && title.left() >= editor_menu.right() && title.right() < export.left(),
+            "back={back:?}, menu={editor_menu:?}, title={title:?}, export={export:?} at {size:?}"
+        );
+        for id in ["presets", "edit", "crop", "remove", "masking", "more"] {
+            let tool = widget(&h, &format!("icon:{id}")).expect("primary tool");
+            assert!(tool.width() >= 44.0 && tool.height() >= 48.0 && tool.bottom() <= size[1], "{id} at {size:?}: {tool:?}");
+        }
+    }
 }
 
 #[test]

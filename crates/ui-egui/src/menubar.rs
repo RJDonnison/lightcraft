@@ -868,7 +868,11 @@ pub fn show_in_window(app: &mut LightcraftApp, ui: &mut egui::Ui, max_width: f32
         }
         ui.spacing_mut().item_spacing.x = saved;
     } else {
-        let r = ui.add(egui::Button::new(egui::RichText::new(crate::i18n::tr("Menu")).font(font.clone()).color(t.text_label)).frame(false));
+        let r = if crate::panels::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+            crate::widgets::icon_button(ui, "menu", crate::icons::Icon::More, egui::vec2(44.0, 44.0), false, true, "More menu commands")
+        } else {
+            ui.add(egui::Button::new(egui::RichText::new(crate::i18n::tr("Menu")).font(font.clone()).color(t.text_label)).frame(false))
+        };
         crate::widgets::register(ui.ctx(), "menu:all", r.rect);
         egui::Popup::menu(&r).show(|ui| {
             crate::menu_level::level(ui, 1, bar_bottom, |ui| {
