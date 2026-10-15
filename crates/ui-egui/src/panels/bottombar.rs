@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::LightcraftApp;
 use crate::icons::{Icon, paint};
-use crate::state::{BeforeAfter, ViewMode, Zoom};
+use crate::state::{ViewMode, Zoom};
 use crate::theme::Tokens;
 use crate::widgets::{icon_button, register, stars};
 
@@ -196,16 +196,8 @@ fn right_side(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, compact_zo
     } else if matches!(app.ui.view, ViewMode::Detail | ViewMode::Compare) {
         // Before/After only with room for it, Filmstrip and the zoom menu
         if child.available_width() >= 36.0 + 36.0 + 10.0 + 64.0
-            && icon_button(
-                &mut child,
-                "beforeAfter",
-                Icon::BeforeAfter,
-                vec2(30.0, 30.0),
-                app.ui.before_after != BeforeAfter::Off,
-                true,
-                "Before/After (Y)",
-            )
-            .clicked()
+            && icon_button(&mut child, "beforeAfter", Icon::BeforeAfter, vec2(30.0, 30.0), app.ui.before_after.is_layout(), true, "Before/After (Y)")
+                .clicked()
         {
             let _ = app.run("view.beforeAfter", json!({}));
         }
@@ -235,7 +227,7 @@ fn right_side(app: &mut LightcraftApp, ui: &mut egui::Ui, full: Rect, compact_zo
                 ("200%", Zoom::Percent(200.0)),
                 ("400%", Zoom::Percent(400.0)),
             ] {
-                if ui.selectable_label(app.ui.zoom == z, label).clicked() {
+                if ui.selectable_label(app.ui.zoom == z, crate::i18n::tr(label)).clicked() {
                     app.ui.zoom = z;
                     app.ui.pan = (0.5, 0.5);
                 }
