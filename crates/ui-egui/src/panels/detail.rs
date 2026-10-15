@@ -2397,6 +2397,11 @@ fn pin(p: &egui::Painter, c: Pos2, sel: bool) {
 /// The Remove tool on the photo: every spot's outline and pin (the selected one with its source),
 /// click a pin to select its spot, drag a target or source to move it, paint elsewhere to add one.
 fn remove_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Response, map: &CanvasMap, d: &DevelopSettings) {
+    // Review is an unobscured, read-only view of the rendered correction. Explicitly returning
+    // to Adjust restores pins and brush input; taps here cannot accidentally add new spots.
+    if super::right::mobile_remove_review(ui.ctx()) && super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+        return;
+    }
     let long = (map.rect.width().max(map.rect.height())) as f64;
     let p = ui.painter_at(app.canvas_rect.unwrap_or(map.rect));
     let phone = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
@@ -2419,34 +2424,18 @@ fn remove_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respo
                 p.circle_stroke(map.screen(Point::new(q.x + o.x, q.y + o.y)), r, Stroke::new(1.0, Color32::from_white_alpha(170)));
             }
             let dir = (tq - sq).normalized();
-            p.arrow(sq + dir * r, (tq - sq) - dir * (2.0 * r).min((tq - sq).length()), Stroke::new(1.0, Color32::from_white_alpha(200)));
+            if !phone {
+                p.arrow(sq + dir * r, (tq - sq) - dir * (2.0 * r).min((tq - sq).length()), Stroke::new(1.0, Color32::from_white_alpha(200)));
+            }
             register(ui.ctx(), format!("spotSource:{i}"), Rect::from_center_size(sq, vec2(target, target)));
             if phone {
                 p.circle_filled(sq, 10.0, Color32::from_black_alpha(190));
                 p.circle_stroke(sq, 10.0, Stroke::new(2.0, Color32::WHITE));
-                let below = sq.y >= tq.y;
-                p.text(
-                    sq + vec2(0.0, if below { 14.0 } else { -14.0 }),
-                    if below { Align2::CENTER_TOP } else { Align2::CENTER_BOTTOM },
-                    "SOURCE",
-                    Tokens::get(ui.ctx()).font(11.0),
-                    Color32::WHITE,
-                );
             }
             grips.push((i, true, sq, r));
         }
         pin(&p, tq, sel);
         register(ui.ctx(), format!("spotPin:{i}"), Rect::from_center_size(tq, vec2(target, target)));
-        if phone && sel {
-            let below = s.source_offset.is_some_and(|o| map.screen(Point::new(t.x + o.x, t.y + o.y)).y < tq.y);
-            p.text(
-                tq + vec2(0.0, if below { 14.0 } else { -14.0 }),
-                if below { Align2::CENTER_TOP } else { Align2::CENTER_BOTTOM },
-                "TARGET",
-                Tokens::get(ui.ctx()).font(11.0),
-                Color32::WHITE,
-            );
-        }
         grips.push((i, false, tq, r));
     }
     let r = (app.ui.remove_size as f64 * long) as f32;
@@ -2545,10 +2534,16 @@ fn remove_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &egui::Respo
             _ => "remove",
         };
         let pts: Vec<[f64; 2]> = points.iter().map(|q| [q.x, q.y]).collect();
-        let _ = app.run(
-            "spot.add",
-            json!({"mode": mode, "points": pts, "size": app.ui.remove_size, "feather": app.ui.remove_feather, "opacity": app.ui.remove_opacity}),
-        );
+        if app
+            .run(
+                "spot.add",
+                json!({"mode": mode, "points": pts, "size": app.ui.remove_size, "feather": app.ui.remove_feather, "opacity": app.ui.remove_opacity}),
+            )
+            .is_ok()
+            && phone
+        {
+            ui.ctx().data_mut(|data| data.insert_temp(egui::Id::new("mobile-remove-review"), true));
+        }
     }
 }
 

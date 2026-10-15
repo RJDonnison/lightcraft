@@ -1483,6 +1483,42 @@ fn phone_remove_marks_target_and_source_for_touch_selection() {
 }
 
 #[test]
+fn phone_remove_review_is_unobscured_and_cannot_start_a_new_spot() {
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        h.app.run("panel.remove", json!({})).unwrap();
+        h.app.run("spot.add", json!({"mode":"clone","points":[[0.3,0.4]],"size":0.025})).unwrap();
+        h.settle(SETTLE);
+        let photo = h.app.session.active().unwrap();
+        assert!(widget(&h, "spotPin:0").is_some());
+        assert!(widget(&h, "spotSource:0").is_some());
+        let review = h.request("ui.clickWidget", json!({"id":"button:removeReview"}), SETTLE);
+        assert_eq!(review["ok"], true, "{review}");
+        h.step();
+        assert!(widget(&h, "spotPin:0").is_none(), "review hides markers at {size:?}");
+        assert!(widget(&h, "spotSource:0").is_none());
+        let q = h.app.image_rect.unwrap().center();
+        h.input([finger(egui::TouchPhase::Start, q, 95), egui::Event::PointerMoved(q), button(q, true)]);
+        h.step();
+        h.input([finger(egui::TouchPhase::End, q, 95), button(q, false)]);
+        h.step();
+        assert_eq!(h.app.session.develop_of(photo).unwrap().spots.len(), 1, "review tap cannot create a correction");
+        let adjust = h.request("ui.clickWidget", json!({"id":"button:removeAdjust"}), SETTLE);
+        assert_eq!(adjust["ok"], true, "{adjust}");
+        h.step();
+        assert!(widget(&h, "spotPin:0").is_some());
+        let select = h.request("ui.clickWidget", json!({"id":"spotPin:0"}), SETTLE);
+        assert_eq!(select["ok"], true, "{select}");
+        h.app.run("spot.update", json!({"size":0.04})).unwrap();
+        assert_eq!(h.app.session.develop_of(photo).unwrap().spots[0].size, 0.04);
+        h.app.run("spot.delete", json!({})).unwrap();
+        assert!(h.app.session.develop_of(photo).unwrap().spots.is_empty());
+        h.app.run("edit.undo", json!({})).unwrap();
+        assert_eq!(h.app.session.develop_of(photo).unwrap().spots.len(), 1);
+    }
+}
+
+#[test]
 fn phone_remove_brush_shows_continuous_coverage_and_keeps_spot_commands() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     h.app.run("panel.remove", json!({})).unwrap();

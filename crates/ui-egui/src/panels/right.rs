@@ -502,6 +502,19 @@ fn remove(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
                     ui.label(egui::RichText::new(label).color(t.text_dim));
                 }
             });
+            ui.horizontal(|ui| {
+                let reviewing = mobile_remove_review(ui.ctx());
+                let review = ui.add_sized([112.0, 44.0], egui::Button::new(crate::i18n::tr("Review Result")).selected(reviewing));
+                register(ui.ctx(), "button:removeReview", review.rect);
+                if review.clicked() {
+                    ui.ctx().data_mut(|data| data.insert_temp(egui::Id::new("mobile-remove-review"), true));
+                }
+                let adjust = ui.add_sized([112.0, 44.0], egui::Button::new(crate::i18n::tr("Adjust Spots")).selected(!reviewing));
+                register(ui.ctx(), "button:removeAdjust", adjust.rect);
+                if adjust.clicked() {
+                    ui.ctx().data_mut(|data| data.insert_temp(egui::Id::new("mobile-remove-review"), false));
+                }
+            });
         });
     }
     let plain = |id: &'static str, label: &'static str, min: f64, max: f64, default: f64| lightcraft_develop::ControlSpec {
@@ -537,8 +550,12 @@ fn remove(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     if mobile {
         padded(ui, |ui| {
             ui.label(
-                egui::RichText::new(crate::i18n::tr("Paint to add a correction. Tap a marker to select it; drag its target or source to move it."))
-                    .color(Tokens::get(ui.ctx()).text_dim),
+                egui::RichText::new(crate::i18n::tr(if mobile_remove_review(ui.ctx()) {
+                    "Review the result without markers. Choose Adjust Spots to select, paint, or move a correction."
+                } else {
+                    "Paint to add a correction. Tap a marker to select it; drag its target or source to move it."
+                }))
+                .color(Tokens::get(ui.ctx()).text_dim),
             );
             find_dust(app, ui);
         });
@@ -584,6 +601,10 @@ fn remove(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
             }
         }
     });
+}
+
+pub(super) fn mobile_remove_review(ctx: &egui::Context) -> bool {
+    ctx.data(|data| data.get_temp::<bool>(egui::Id::new("mobile-remove-review"))).unwrap_or(false)
 }
 
 fn find_dust(app: &mut LightcraftApp, ui: &mut egui::Ui) {
