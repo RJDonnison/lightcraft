@@ -211,6 +211,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
             let row = flyout_row(ui, "curve", crate::i18n::tr("Curve"), Icon::Curve, false);
             register(ui.ctx(), "mobileEdit:curve", row.rect);
             if row.clicked() {
+                if app.ui.curve_channel == "parametric" {
+                    app.ui.curve_channel = "master".into();
+                }
                 set_mobile_edit_focus(ui.ctx(), "curve");
             }
         }
@@ -991,49 +994,71 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
     let t = Tokens::get(ui.ctx());
     let touch = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
     // channel selector
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 6, bottom: 4 }).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            for (ch, c) in [
-                ("parametric", Color32::from_gray(200)),
-                ("master", Color32::WHITE),
-                ("red", hex("#dd3333")),
-                ("green", hex("#33bb55")),
-                ("blue", hex("#3377ee")),
-            ] {
-                let (r, resp) = ui.allocate_exact_size(vec2(if touch { 44.0 } else { 24.0 }, if touch { 44.0 } else { 24.0 }), Sense::click());
-                register(ui.ctx(), format!("curveChannel:{ch}"), r);
-                let sel = app.ui.curve_channel == ch;
-                if ch == "parametric" {
-                    paint(ui.painter(), r.shrink(4.0), Icon::Curve, if sel { t.text } else { t.icon });
-                } else {
-                    ui.painter().circle_stroke(r.center(), 7.0, Stroke::new(2.0, c));
-                    if sel {
-                        ui.painter().circle_filled(r.center(), 3.5, c);
+    egui::Frame::NONE.inner_margin(egui::Margin { left: if touch { 8 } else { 24 }, right: if touch { 8 } else { 22 }, top: 6, bottom: 4 }).show(
+        ui,
+        |ui| {
+            ui.horizontal(|ui| {
+                if touch {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                }
+                let channels = [
+                    ("parametric", Color32::from_gray(200)),
+                    ("master", Color32::WHITE),
+                    ("red", hex("#dd3333")),
+                    ("green", hex("#33bb55")),
+                    ("blue", hex("#3377ee")),
+                ];
+                let width = ((ui.available_width() - 12.0) / 4.0).max(44.0);
+                for (ch, c) in channels.into_iter().filter(|(ch, _)| !touch || *ch != "parametric") {
+                    let (r, resp) = ui.allocate_exact_size(vec2(if touch { width } else { 24.0 }, if touch { 44.0 } else { 24.0 }), Sense::click());
+                    register(ui.ctx(), format!("curveChannel:{ch}"), r);
+                    let sel = app.ui.curve_channel == ch;
+                    if touch {
+                        ui.painter().rect_filled(r, 4.0, if sel { t.hover } else { t.chrome });
+                        ui.painter().text(
+                            r.center(),
+                            Align2::CENTER_CENTER,
+                            crate::i18n::tr(channel_label(ch)),
+                            t.font(13.0),
+                            if sel { c } else { t.text_label },
+                        );
+                    } else {
+                        if ch == "parametric" {
+                            paint(ui.painter(), r.shrink(4.0), Icon::Curve, if sel { t.text } else { t.icon });
+                        } else {
+                            ui.painter().circle_stroke(r.center(), 7.0, Stroke::new(2.0, c));
+                            if sel {
+                                ui.painter().circle_filled(r.center(), 3.5, c);
+                            }
+                        }
+                        if sel {
+                            ui.painter()
+                                .line_segment([r.left_bottom() + vec2(4.0, 1.0), r.right_bottom() + vec2(-4.0, 1.0)], Stroke::new(2.0, t.text));
+                        }
+                    }
+                    let name = match ch {
+                        "parametric" => "Parametric curve",
+                        "master" => "Point curve",
+                        "red" => "Red channel",
+                        "green" => "Green channel",
+                        _ => "Blue channel",
+                    };
+                    let resp = resp.on_hover_text(crate::i18n::tr_format!("{name} — double-click to reset it", name = name));
+                    if crate::widgets::double_clicked(ui, &resp) {
+                        app.ui.curve_channel = ch.into();
+                        let _ = app.run("curve.reset", json!({"channel": ch}));
+                    } else if resp.clicked() {
+                        app.ui.curve_channel = ch.into();
                     }
                 }
-                if sel {
-                    ui.painter().line_segment([r.left_bottom() + vec2(4.0, 1.0), r.right_bottom() + vec2(-4.0, 1.0)], Stroke::new(2.0, t.text));
+                if !touch {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        tat_button(app, ui, "tat:curve", "Targeted adjustment: drag up/down on the photo to adjust the curve there");
+                    });
                 }
-                let name = match ch {
-                    "parametric" => "Parametric curve",
-                    "master" => "Point curve",
-                    "red" => "Red channel",
-                    "green" => "Green channel",
-                    _ => "Blue channel",
-                };
-                let resp = resp.on_hover_text(crate::i18n::tr_format!("{name} — double-click to reset it", name = name));
-                if crate::widgets::double_clicked(ui, &resp) {
-                    app.ui.curve_channel = ch.into();
-                    let _ = app.run("curve.reset", json!({"channel": ch}));
-                } else if resp.clicked() {
-                    app.ui.curve_channel = ch.into();
-                }
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                tat_button(app, ui, "tat:curve", "Targeted adjustment: drag up/down on the photo to adjust the curve there");
             });
-        });
-    });
+        },
+    );
     let ch = app.ui.curve_channel.clone();
     let w = ui.available_width();
     // between the panel's 24 / 22 pt margins, like the sliders
@@ -1091,6 +1116,9 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
             .collect();
         p.add(egui::Shape::line(pts, Stroke::new(2.0, Color32::from_gray(220))));
         curve_footer(app, ui, d);
+        if touch {
+            mobile_curve_actions(app, ui, &ch);
+        }
         for c in ["curve.highlights", "curve.lights", "curve.darks", "curve.shadows"] {
             control(app, ui, d, c, true);
         }
@@ -1217,9 +1245,9 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
             let lo = if i == 0 { 0.0 } else { v[i - 1].x + 0.01 };
             let hi = if i + 1 >= v.len() { 1.0 } else { v[i + 1].x - 0.01 };
             if i == 0 {
-                x = x.min(hi);
+                x = 0.0;
             } else if i + 1 == v.len() {
-                x = x.max(lo);
+                x = 1.0;
             } else if lo <= hi {
                 x = x.clamp(lo, hi);
             } else {
@@ -1253,8 +1281,34 @@ fn curve_editor(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, d: &Dev
     }
     ui.data_mut(|dd| dd.insert_temp(drag_id, dragging));
     curve_footer(app, ui, d);
+    if touch {
+        mobile_curve_actions(app, ui, &ch);
+    }
     control(app, ui, d, "curve.refineSaturation", true);
     let _ = id;
+}
+
+fn mobile_curve_actions(app: &mut LightcraftApp, ui: &mut egui::Ui, channel: &str) {
+    ui.horizontal(|ui| {
+        let label = if channel == "parametric" { "Reset Parametric" } else { "Reset Current Channel" };
+        let width = ((ui.available_width() - ui.spacing().item_spacing.x) / 2.0).max(44.0);
+        let r = ui.add_sized([width, 44.0], egui::Button::new(crate::i18n::tr(label)));
+        register(ui.ctx(), "mobileCurve:resetChannel", r.rect);
+        if r.clicked() {
+            let _ = app.run("curve.reset", json!({"channel": channel}));
+        }
+        let label = if channel == "parametric" { "Point Curves" } else { "Parametric Curve" };
+        let r = ui.add_sized([width, 44.0], egui::Button::new(crate::i18n::tr(label)));
+        register(ui.ctx(), "mobileCurve:toggleParametric", r.rect);
+        if r.clicked() {
+            app.ui.curve_channel = if channel == "parametric" { "master" } else { "parametric" }.into();
+        }
+    });
+    let r = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(crate::i18n::tr("Reset All Curves")));
+    register(ui.ctx(), "mobileCurve:resetAll", r.rect);
+    if r.clicked() {
+        let _ = app.run("curve.reset", json!({"channel":"all"}));
+    }
 }
 
 /// Height of the strip under the parametric graph that holds the split handles (a finger's width).
@@ -1443,14 +1497,16 @@ fn curve_footer(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &DevelopSettings)
                     ui.label(RichText::new(crate::i18n::tr("Right-click a preset to delete it")).font(t.font(11.0)).color(t.text_dim));
                 }
             });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let r = text_button(ui, "curveReset", crate::i18n::tr("Reset"), false).on_hover_text(crate::i18n::tr(
-                    "Reset all curves: point curves (all channels) and parametric (double-click a channel to reset only that one)",
-                ));
-                if r.clicked() {
-                    let _ = app.run("curve.reset", json!({"channel": "all"}));
-                }
-            });
+            if !(super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx())) {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let r = text_button(ui, "curveReset", crate::i18n::tr("Reset"), false).on_hover_text(crate::i18n::tr(
+                        "Reset all curves: point curves (all channels) and parametric (double-click a channel to reset only that one)",
+                    ));
+                    if r.clicked() {
+                        let _ = app.run("curve.reset", json!({"channel": "all"}));
+                    }
+                });
+            }
         });
     });
 }

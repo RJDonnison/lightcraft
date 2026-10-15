@@ -1083,6 +1083,57 @@ fn landscape_phone_curve_leaves_the_photo_visible_beside_the_workspace() {
 }
 
 #[test]
+fn phone_curve_channels_keep_independent_points_and_anchor_endpoints() {
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        let photo = h.app.session.active().unwrap();
+        h.app.run("develop.set", json!({"control":"light.exposure", "value":0.6})).unwrap();
+        let open = h.request("ui.clickWidget", json!({"id":"mobileEdit:curve"}), SETTLE);
+        assert_eq!(open["ok"], true, "{open}");
+        h.settle(SETTLE);
+        let graph = widget(&h, "curve").unwrap();
+        assert_eq!(h.app.ui.curve_channel, "master");
+        assert!(graph.top() >= widget(&h, "mobileCurve:workspace").unwrap().top());
+        for (ch, y) in [("master", 0.35), ("red", 0.6), ("green", 0.45), ("blue", 0.75)] {
+            let choose = h.request("ui.clickWidget", json!({"id":format!("curveChannel:{ch}")}), SETTLE);
+            assert_eq!(choose["ok"], true, "{choose}");
+            h.app.run("develop.curve", json!({"channel":ch,"points":[[0.0,0.0],[0.5,y],[1.0,1.0]]})).unwrap();
+            h.step();
+        }
+        let drag = h.request("ui.dragWidget", json!({"id":"curve","fx":1.0,"fy":0.0,"dx":-30.0,"dy":35.0,"steps":12}), SETTLE);
+        assert_eq!(drag["ok"], true, "{drag}");
+        let drag = h.request("ui.dragWidget", json!({"id":"curve","fx":0.0,"fy":1.0,"dx":30.0,"dy":-35.0,"steps":12}), SETTLE);
+        assert_eq!(drag["ok"], true, "{drag}");
+        let d = h.app.session.develop_of(photo).unwrap();
+        assert_eq!(d.curve.blue.first().unwrap().x, 0.0, "endpoint stays on the left edge");
+        assert_eq!(d.curve.blue.last().unwrap().x, 1.0, "endpoint stays on the right edge");
+        assert!((d.curve.master[1].y - 0.35).abs() < 0.001);
+        assert!((d.curve.red[1].y - 0.6).abs() < 0.001);
+        assert!((d.curve.green[1].y - 0.45).abs() < 0.001);
+        drop(d);
+        let workspace = widget(&h, "mobileCurve:workspace").unwrap();
+        h.request("ui.move", json!({"x":workspace.center().x,"y":workspace.bottom()-35.0}), SETTLE);
+        h.request("ui.scroll", json!({"dy":-400.0}), SETTLE);
+        h.settle(SETTLE);
+        let reset = h.request("ui.clickWidget", json!({"id":"mobileCurve:resetChannel"}), SETTLE);
+        assert_eq!(reset["ok"], true, "{reset}");
+        let d = h.app.session.develop_of(photo).unwrap();
+        assert!(d.curve.blue.is_empty(), "only the selected Blue channel resets");
+        assert_eq!(d.curve.red.len(), 3);
+        drop(d);
+        let reset_all = h.request("ui.clickWidget", json!({"id":"mobileCurve:resetAll"}), SETTLE);
+        assert_eq!(reset_all["ok"], true, "{reset_all}");
+        assert!(h.app.session.develop_of(photo).unwrap().curve.red.is_empty());
+        let done = h.request("ui.clickWidget", json!({"id":"button:mobileCurveDone"}), SETTLE);
+        assert_eq!(done["ok"], true, "{done}");
+        assert!(widget(&h, "mobileEdit:curve").is_some(), "Done returns to Light");
+        assert_eq!(h.app.session.active(), Some(photo));
+        assert!((h.app.session.develop_of(photo).unwrap().light.exposure - 0.6).abs() < 0.001);
+        assert!(!h.app.session.undo.is_empty());
+    }
+}
+
+#[test]
 fn phone_crop_uses_visual_aspects_separate_geometry_and_large_handles() {
     let mut h = touch_app(ViewMode::Detail, [390.0, 844.0]);
     h.app.run("panel.crop", json!({})).unwrap();
