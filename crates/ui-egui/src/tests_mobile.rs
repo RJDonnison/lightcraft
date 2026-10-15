@@ -515,16 +515,50 @@ fn phone_device_photo_imports_once_on_open_and_reopens_existing_edit() {
         assert_eq!(r["ok"], true, "{r}");
         h.step_until(SETTLE, |h| h.app.ui.view == ViewMode::Detail);
         assert_eq!(h.app.session.catalog.len(), n + 1, "opening {attempt} must not duplicate");
-        assert!(!h.app.ui.device_gallery);
+        assert!(h.app.ui.device_gallery, "Back must return to the same Device Photos listing");
         if attempt == 0 {
             h.app.run("develop.set", json!({"control":"light.exposure", "value":0.7})).unwrap();
-            h.app.ui.device_gallery = true;
-            h.app.ui.view = ViewMode::PhotoGrid;
-            h.step();
+            assert_eq!(h.request("engine.execute", json!({"command":"view.back"}), SETTLE)["ok"], true);
+            assert!(widget(&h, "devicePhoto:42").is_some());
         }
     }
     assert_eq!(h.app.session.catalog.photo(h.app.session.active().unwrap()).unwrap().develop.light.exposure, 0.7);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn phone_returns_to_album_scroll_and_selection_after_editing() {
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::PhotoGrid, size);
+        let album = h.app.run("album.create", json!({"name":"Review"})).unwrap()["id"].as_u64().unwrap();
+        let ids: Vec<_> = h.app.session.visible_cloned().iter().map(|id| id.0).collect();
+        h.app.run("album.addPhotos", json!({"id": album, "ids": ids})).unwrap();
+        h.app.run("library.source", json!({"kind":"album", "id":album})).unwrap();
+        h.app.run("library.sort", json!({"key":"fileName"})).unwrap();
+        h.app.run("library.filter", json!({"text":"."})).unwrap();
+        h.request("ui.set", json!({"thumbSize": 320.0}), SETTLE);
+        h.step();
+        let canvas = h.app.canvas_rect.unwrap();
+        h.request("ui.move", json!({"x":canvas.center().x, "y":canvas.center().y}), SETTLE);
+        h.request("ui.scroll", json!({"dy": -310.0}), SETTLE);
+        h.step();
+        let source = h.app.session.source;
+        let sort = h.app.session.sort;
+        let filter = h.app.session.filter.clone();
+        let selection = h.app.session.selection.clone();
+        let scroll = h.app.grid_scroll.unwrap_or_default();
+        assert!(scroll > 0.0, "grid must have moved before opening Edit at {size:?}");
+        h.app.run("view.detail", json!({})).unwrap();
+        h.step();
+        h.app.run("develop.set", json!({"control":"light.exposure", "value":0.4})).unwrap();
+        h.app.run("view.back", json!({})).unwrap();
+        h.step();
+        assert_eq!(h.app.session.source, source);
+        assert_eq!(h.app.session.sort, sort);
+        assert_eq!(h.app.session.filter, filter);
+        assert_eq!(h.app.session.selection, selection);
+        assert!((h.app.grid_scroll.unwrap_or_default() - scroll).abs() < 2.0, "grid scroll at {size:?}");
+    }
 }
 
 #[test]

@@ -21,6 +21,12 @@ struct Item {
     preview_available: bool,
 }
 
+struct BrowsingContext {
+    source: lightcraft_engine::LibrarySource,
+    selection: Selection,
+    device_id: String,
+}
+
 #[derive(Default)]
 pub struct State {
     items: Vec<Item>,
@@ -30,6 +36,17 @@ pub struct State {
     more: bool,
     opening: bool,
     notice: Option<Notice>,
+    before_editor: Option<BrowsingContext>,
+    selected_id: Option<String>,
+}
+
+/// Restore the catalog selection without changing the device listing or its scroll offset.
+pub fn return_to_device(app: &mut LightcraftApp) -> bool {
+    let Some(context) = app.caches.device_photos.before_editor.take() else { return false };
+    app.session.source = context.source;
+    app.session.selection = context.selection;
+    app.caches.device_photos.selected_id = Some(context.device_id);
+    true
 }
 
 pub fn tabs(app: &mut LightcraftApp, ui: &mut egui::Ui) {
@@ -118,18 +135,25 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                         .or_else(|| report["restored"].as_array().and_then(|a| a.first()).and_then(serde_json::Value::as_u64))
                         .or_else(|| report["duplicates"].as_array().and_then(|a| a.first()).and_then(|v| v["existing"].as_u64()));
                     if let Some(id) = id {
-                        let _ = app.run("library.source", json!({"kind":"all"}));
+                        // The device owns this listing. Keep the catalog's source, filter, sort
+                        // and album intact while the imported copy is edited.
                         app.session.selection = Selection::single(PhotoId(id));
-                        app.ui.device_gallery = false;
                         app.ui.library_home = false;
                         app.ui.view = ViewMode::Detail;
                     } else {
+                        app.caches.device_photos.before_editor = None;
                         app.toast(&ctx, "Photo is already in the library. Open it from All Photos.");
                     }
                 }
-                Err(err) => app.toast(&ctx, err),
+                Err(err) => {
+                    app.caches.device_photos.before_editor = None;
+                    app.toast(&ctx, err);
+                }
             },
-            Err(err) => app.toast(&ctx, err),
+            Err(err) => {
+                app.caches.device_photos.before_editor = None;
+                app.toast(&ctx, err);
+            }
         }
     }
     let state = &mut app.caches.device_photos;
@@ -209,6 +233,14 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
                     if response.clicked() {
                         selected = Some(item.id.clone());
                     }
+                    if state.selected_id.as_deref() == Some(item.id.as_str()) {
+                        ui.painter().rect_stroke(
+                            rect,
+                            2.0,
+                            egui::Stroke::new(2.0, crate::theme::Tokens::get(ui.ctx()).accent),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
                 }
             });
         }
@@ -227,11 +259,14 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     if let Some(id) = selected
         && !state.opening
     {
+        state.before_editor = Some(BrowsingContext { source: app.session.source, selection: app.session.selection.clone(), device_id: id.clone() });
+        state.selected_id = Some(id.clone());
         state.opening = true;
         if let Some(gallery) = app.services.device_gallery.as_mut()
             && let Err(err) = (gallery.open)(&id)
         {
             state.opening = false;
+            state.before_editor = None;
             state.notice = Some(Notice::Failed(err));
         }
     }

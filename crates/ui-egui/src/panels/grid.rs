@@ -264,14 +264,20 @@ fn show_inner(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let active = app.session.selection.active;
     // bring the active photo into view when it changes (keyboard, click, command) or the grid
     // comes back on screen; otherwise the scroll position is the user's
-    let scroll_to: Option<Rect> = if follow_active(ui.ctx(), egui::Id::new("grid-follow-active"), active, app.session.source) {
+    let restore = app.caches.grid_return.take().and_then(|(source, y)| (source == app.session.source).then_some(y));
+    let follow = follow_active(ui.ctx(), egui::Id::new("grid-follow-active"), active, app.session.source);
+    let scroll_to: Option<Rect> = if restore.is_none() && follow {
         active.and_then(|a| ids.iter().position(|x| *x == a)).and_then(|i| lay.cells.get(i).copied())
     } else {
         None
     };
     let mut visible_ids = HashSet::new();
     let mut visited = 0u64;
-    egui::ScrollArea::vertical().id_salt("grid-scroll").auto_shrink([false, false]).show_viewport(ui, |ui, viewport| {
+    let mut scroll = egui::ScrollArea::vertical().id_salt("grid-scroll").auto_shrink([false, false]);
+    if let Some(y) = restore {
+        scroll = scroll.scroll_offset(vec2(0.0, y));
+    }
+    scroll.show_viewport(ui, |ui, viewport| {
         let (area, _) = ui.allocate_exact_size(vec2(ui.available_width(), total_h), Sense::hover());
         let origin = area.min;
         app.grid_scroll = Some(viewport.top());

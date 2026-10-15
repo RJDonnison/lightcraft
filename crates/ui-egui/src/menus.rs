@@ -492,6 +492,13 @@ pub fn run_ui_command(app: &mut LightcraftApp, id: &str, p: &Value) -> Option<Re
             Ok(Value::Null)
         }
         "view.detail" => {
+            if crate::panels::compact::is_compact(&ctx)
+                && crate::widgets::touch_screen(&ctx)
+                && matches!(app.ui.view, ViewMode::PhotoGrid | ViewMode::SquareGrid)
+                && let Some(y) = app.grid_scroll
+            {
+                app.caches.grid_return = Some((app.session.source, y));
+            }
             app.ui.view = ViewMode::Detail;
             Ok(Value::Null)
         }
@@ -594,7 +601,12 @@ pub fn run_ui_command(app: &mut LightcraftApp, id: &str, p: &Value) -> Option<Re
                         app.ui.view = ViewMode::People;
                         app.ui.person_page = Some(name);
                     }
-                    _ => app.ui.view = ViewMode::PhotoGrid,
+                    _ => {
+                        app.ui.view = ViewMode::PhotoGrid;
+                        if app.ui.device_gallery && crate::panels::device_gallery::return_to_device(app) {
+                            app.caches.grid_return = None;
+                        }
+                    }
                 }
             }
             Ok(Value::Null)

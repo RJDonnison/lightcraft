@@ -143,8 +143,10 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
 fn topbar(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let editor = crate::widgets::touch_screen(ui.ctx()) && app.ui.view == ViewMode::Detail;
-    let gallery_home =
-        app.services.device_gallery.is_some() && crate::widgets::touch_screen(ui.ctx()) && (app.ui.device_gallery || app.ui.library_home);
+    let gallery_home = app.services.device_gallery.is_some()
+        && crate::widgets::touch_screen(ui.ctx())
+        && matches!(app.ui.view, ViewMode::PhotoGrid | ViewMode::SquareGrid)
+        && (app.ui.device_gallery || app.ui.library_home);
     egui::Panel::top("top_bar")
         .exact_size(if editor { 44.0 } else { t.top_bar_h + 4.0 })
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin { left: BAR_MARGIN, right: BAR_MARGIN, top: 0, bottom: 0 }))

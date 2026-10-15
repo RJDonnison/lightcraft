@@ -1685,6 +1685,8 @@ mod drop_tests {
 pub struct Caches {
     /// Visible, transient platform photo listing. Device originals are not catalog entries.
     pub device_photos: panels::device_gallery::State,
+    /// Grid position before opening the editor, restored on Back if the source still matches.
+    pub grid_return: Option<(lightcraft_engine::LibrarySource, f32)>,
     keyword_tree: Option<(u64, std::sync::Arc<Vec<lightcraft_catalog::KeywordNode>>)>,
     /// The Keywording box's read-only names (with containing keywords, or Will Export), by library
     /// revision, selection and view.
