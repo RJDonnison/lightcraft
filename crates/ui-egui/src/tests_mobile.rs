@@ -635,6 +635,76 @@ fn phone_returns_to_album_scroll_and_selection_after_editing() {
 }
 
 #[test]
+fn phone_library_edit_curve_grading_and_masks_return_to_the_same_photo() {
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::PhotoGrid, size);
+        let photo = h.app.session.active().expect("selected library photo");
+        h.app.run("library.sort", json!({"key":"fileName"})).unwrap();
+        h.app.run("library.filter", json!({"text":"."})).unwrap();
+        let source = h.app.session.source;
+        let filter = h.app.session.filter.clone();
+        let sort = h.app.session.sort;
+        let selection = h.app.session.selection.clone();
+        h.app.run("view.detail", json!({})).unwrap();
+        h.app.run("develop.set", json!({"control":"light.exposure","value":0.7})).unwrap();
+        h.settle(SETTLE);
+        let click = |h: &mut Headless, id: &str| {
+            let result = h.request("ui.clickWidget", json!({"id":id}), SETTLE);
+            assert_eq!(result["ok"], true, "{id} at {size:?}: {result}");
+            h.step();
+        };
+        click(&mut h, "mobileEdit:curve");
+        click(&mut h, "curveChannel:red");
+        h.app.run("develop.curve", json!({"channel":"red","points":[[0.0,0.0],[0.5,0.65],[1.0,1.0]]})).unwrap();
+        click(&mut h, "button:mobileCurveDone");
+        assert!(widget(&h, "mobileEdit:curve").is_some(), "Curve returns to Light");
+        click(&mut h, "mobileEdit:color");
+        click(&mut h, "mobileEdit:grading");
+        for (range, hue) in [("shadows", 30), ("midtones", 90), ("highlights", 180), ("global", 270)] {
+            click(&mut h, &format!("mobileGrading:{range}"));
+            h.app.run("develop.set", json!({"control":format!("grading.{range}.hue"),"value":hue})).unwrap();
+        }
+        click(&mut h, "mobileEdit:color");
+        assert!(widget(&h, "mobileEdit:grading").is_some(), "Grading returns to Color");
+        click(&mut h, "icon:masking");
+        h.app.run("mask.add", json!({"kind":"linear"})).unwrap();
+        h.app.run("mask.adjust", json!({"values":{"exposure":0.5}})).unwrap();
+        h.settle(SETTLE);
+        let first = h.app.session.active_mask.expect("first mask");
+        click(&mut h, "mobileMask:options");
+        click(&mut h, "button:maskInvert");
+        click(&mut h, "mobileMask:options");
+        h.app.run("mask.addComponent", json!({"op":"add","kind":"radial"})).unwrap();
+        h.app.run("mask.add", json!({"kind":"brush"})).unwrap();
+        h.settle(SETTLE);
+        click(&mut h, &format!("mask:{first}"));
+        assert_eq!(h.app.session.active_mask, Some(first));
+        click(&mut h, "mobileMaskRail:overlay");
+        let develop = h.app.session.develop_of(photo).expect("photo edits");
+        assert_eq!(develop.light.exposure, 0.7);
+        assert_eq!(develop.curve.red.len(), 3);
+        assert_eq!(develop.grading.shadows.hue, 30.0);
+        assert_eq!(develop.grading.midtones.hue, 90.0);
+        assert_eq!(develop.grading.highlights.hue, 180.0);
+        assert_eq!(develop.grading.global.hue, 270.0);
+        assert_eq!(develop.masks.len(), 2);
+        assert_eq!(develop.masks[0].components.len(), 2);
+        assert!(develop.masks[0].invert);
+        assert_eq!(develop.masks[0].adjust.exposure, 0.5);
+        assert_eq!(develop.masks[1].adjust.exposure, 0.0);
+        h.app.run("view.back", json!({})).unwrap();
+        h.settle(SETTLE);
+        assert!(matches!(h.app.ui.view, ViewMode::PhotoGrid | ViewMode::SquareGrid), "Back returns to Library at {size:?}");
+        assert_eq!(h.app.session.active(), Some(photo));
+        assert_eq!(h.app.session.source, source);
+        assert_eq!(h.app.session.filter, filter);
+        assert_eq!(h.app.session.sort, sort);
+        assert_eq!(h.app.session.selection, selection);
+        assert!(!h.app.session.undo.is_empty());
+    }
+}
+
+#[test]
 fn device_gallery_permission_revocation_clears_cached_previews() {
     use std::sync::{
         Arc,

@@ -1,6 +1,6 @@
 # UI parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (accessibility audit: test over the AccessKit tree; fields, sliders and dialogs named) · **Target:** Adobe Lightroom Classic 15.5 / Lightroom 9.6
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-16 · **Change:** minor (mobile workflow verification and remaining device checks) · **Target:** Adobe Lightroom Classic 15.5 / Lightroom 9.6
 
 How LightCraft's interaction compares with Lightroom's: views, panels, tools and handles, modifier
 keys, shortcuts, zoom, context menus and feel. Rows for individual menu items and shortcuts live in
@@ -39,6 +39,13 @@ assessment and the notes that don't fit a row. Visual reference for agents: `pla
 Remaining: **34–58 h** (zoom detail 8–15 h, brush and masking feel 8–12 h, accessibility 4–8
 h, Classic keymap layer 4–8 h, context-menu audit 4–8 h, text-field and IME polish 4–8 h). Output
 modules and AI tools are counted with their features in [target-app-parity.md](target-app-parity.md).
+
+Mobile MUX-31–41 adds tested Library return context, photo-first Edit/Curve/Grading,
+split floating mask management and model-gated creation, Remove review, Crop precision and
+Save / Share. The integrated touch-enabled host path and separate two-orientation Remove,
+Crop and Export regressions cover the command-backed UI. Android permission recovery,
+gallery ownership, physical touch behavior and Photos/Downloads publication still need
+a device pass; these host results do not change the overall readiness estimate.
 
 ## Shortcuts
 
@@ -105,6 +112,7 @@ left panel, canvas, right panel, which is sensible but not tuned).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Mobile MUX-31–41 integrated host verification; Android gallery, export and touch checks remain open; overall estimate unchanged |
 | 2026-10-12 | minor | Accessibility: an AccessKit tree audit test over every view, Develop tool and 13 dialogs; unnamed fields, slider ranges and the Auto Stack slider fixed; 30% → 55%; UI remaining 40–70 h → 34–58 h |
 | 2026-10-11 | minor | Zoom row: Compare and Reference get zoom windows; what remains of LR-VIEW-ZOOM is overlays and soft proofing |
 | 2026-10-10 | major | Created: measured command and shortcut counts, assessment by area, estimates; moved the shortcut conflicts section here from the checklist |

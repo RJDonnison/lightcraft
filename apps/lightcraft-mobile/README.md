@@ -1,7 +1,7 @@
 # LightCraft mobile (spike)
 
-The desktop egui UI and engine, **unmodified**, in a thin iOS/iPadOS or Android shell. It's a
-feasibility spike, not a usable mobile app. The assessment, the effort estimate and the blockers
+The shared egui UI and engine in a thin iOS/iPadOS or Android shell, with compact-touch adaptations.
+It is still a mobile feasibility build; the assessment, effort estimate and blockers
 are in [docs/porting-report.md](docs/porting-report.md).
 
 | iPad (iOS 26.5 Simulator) | iPhone, before the compact layout | Android tablet (API 35 emulator) |
@@ -39,16 +39,19 @@ Below 600pt of width or 500pt of height (inside the safe area), `lightcraft-ui-e
 a compact layout (`crates/ui-egui/src/panels/compact.rs`). It's used on phones in either
 orientation, iPad Split View and phone browsers:
 
-- **Top bar:** catalog grids have My Photos, Back, Menu, Search, Filter and Export; Device Photos
+- **Top bar:** catalog grids have My Photos, Back, an icon menu, Search, Filter and Export; Device Photos
   and the Library home use their persistent tabs instead of a misleading Back or catalog Export.
-  The touch editor has a smaller Back, Menu and Export header without a repeated title; its
+  The touch editor has Back, a More menu, a contextual Photo title and Export; its
   bottom More control opens the secondary editing tools.
 - **Detail view:** the photo on top, with a persistent touch tool bar (Presets, Edit, Crop,
   Remove, Masking, More) and a bottom sheet showing the chosen tool. More opens the other
-  panels; tapping the active tool or the photo dismisses the fixed-height sheet. Edit has visible,
-  wrapped Light, Color, Effects, Detail, Optics and Calibration categories,
-  with Curve under Light and Grading under Color. Curve opens a larger focused workspace over
-  the photo in portrait or beside it in landscape; Done returns to the Edit sheet. A button at
+  panels; tapping the active tool or the photo dismisses the fixed-height sheet. Edit pins five
+  categories—Light, Color, Effects, Detail and Optics—above the scrolling controls; Calibration
+  lives under Color. Curve is under Light and Color Grading under Color. Curve offers separate RGB,
+  Red, Green and Blue point channels and distinct channel/all resets; Done returns to Light.
+  Grading has Shadows, Midtones, Highlights and Global wheels, plus shared Blending and Balance;
+  leaving it returns to Color. Curve opens a larger focused workspace over
+  the photo in portrait or beside it in landscape. A button at
   the photo's upper left shows a small RGB histogram over the photo; the adjacent button reveals
   a wider graph with exposure detail, and tapping the graph hides it. The phone overlay starts
   hidden and does not affect the desktop histogram. Crop separates
@@ -57,14 +60,17 @@ orientation, iPad Split View and phone browsers:
   straightening appear first; More crop options holds custom ratios, precise angle, rotation,
   flips and overlays. Drag a handle to resize or drag inside the frame to move it. Masking puts
   effective white-on-black previews, creation, selection, visibility, overlay and component
-  management beside the photo. Tap a mask preview to select it; hold it to manage that mask
-  (or use its context action / Shift+F10 with a keyboard). The lower sheet shows only the selected
+  management beside the photo. Tap a mask preview to select it; Options opens separate floating
+  management (also available by hold, context action or Shift+F10). Add opens a large scrollable
+  creation chooser: manual and range masks work, while Subject, Sky, Background, Object and
+  Describe require unavailable models and are disabled by the mobile command boundary too.
+  The lower sheet shows only the selected
   mask's Light/Color/Effects/Detail adjustments; with no mask selected it stays out of the way
   so the photo and the rail's Add control remain visible. Remove puts the shared Brush Size and
   Feather controls before its own Opacity and correction actions, and shows a continuous preview while painting.
-  Remove marks the selected correction's target and source separately on the photo, with
-  finger-sized hit targets: tap to select, drag a marker to move it, and paint away from markers
-  to add a correction.
+  Remove's Review Result hides markers and prevents new strokes so the correction can be inspected;
+  Adjust Spots restores finger-sized target/source handles for selection and movement, with painting
+  away from markers adding a correction.
   On non-touch compact windows the tools remain inside the sheet. In
   landscape the sheet is a column at the right of the photo instead. The histogram is lower
   than on the desktop, and the filmstrip is lower in landscape.
@@ -75,7 +81,9 @@ orientation, iPad Split View and phone browsers:
   Recently Added, Picks and Recently Deleted, as well as manual Import Photos. Browsing does not
   copy originals. Opening a device photo for editing
   copies it to `<library>/Picked/Device Photos` once and opens it directly; re-opening keeps its
-  existing edits. Full and selected-only gallery grants show only accessible photos. Denied or
+  existing edits. Back restores the device listing, while catalog Edit returns to the same source,
+  album, filter, sort, selection and grid scroll. Full and selected-only gallery grants show only
+  accessible photos. Denied or
   revoked access clears the device thumbnails; edits already in the catalog remain available.
   Device Photos distinguishes access, loading and query failures, with one retry action; an
   accessible but empty gallery waits for a manual refresh instead of continuously requerying.
@@ -171,7 +179,8 @@ orientation, iPad Split View and phone browsers:
   can't hold a whole export (Android's 128–256 MB limits) renders it in tiles too, instead of on
   the CPU. Edits that read the whole photo (spot
   removal, Refine Edges, Auto Mask brushes, subject/background masks) still export smaller.
- - **Export and share:** on Android, the phone Export button offers a compact format chooser,
+ - **Export and share:** on Android, the phone Export button opens a near-full-width Save / Share
+   dialog with a scrollable format chooser, a destination and size summary, a persistent action,
    a long-edge pixel limit for rendered files, quality for JPEG/AVIF/JPEG XL and reusable
    creator/copyright fields. Attribution applies only to the exported metadata or XMP sidecar;
    it does not change the library photo. Original and DNG exports keep their full dimensions.
@@ -281,6 +290,11 @@ The whole UI stays inside the iOS safe area (status bar, Dynamic Island, home in
 
 ## Known problems
 
+- **Android UX verification remains open.** The 390×844 and 844×390 host touch snapshots and
+  command-based regressions exercise the integrated Library, Curve, Grading, Masking, Remove,
+  Crop and Export routes; they do not establish physical-device touch latency, accessibility
+  focus order, gallery permission recovery or MediaStore publication. The 600×900 desktop
+  boundary is checked separately from the phone layouts.
 - **Android gallery and export still need a device pass.** The MediaStore bridge compiles for
   Android and its UI and worker boundaries are tested headlessly, but there was no attached
   Android device during this UX work. Verify selected-only/denied/revoked access, opening a
