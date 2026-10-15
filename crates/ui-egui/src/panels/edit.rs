@@ -76,7 +76,11 @@ fn rel_to_k(r: f64) -> f64 {
 
 pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
     let t = Tokens::get(ui.ctx());
-    let focus = if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) { Some(mobile_edit_navigation(ui)) } else { None };
+    let focus = if super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+        Some(ui.ctx().data(|d| d.get_temp::<String>(egui::Id::new("mobile-edit-category"))).unwrap_or_else(|| "light".into()))
+    } else {
+        None
+    };
     let d = app.session.develop_of(id).unwrap_or_default();
     // a raw shown from its embedded JPEG (preview only) gets the rendered-file white balance scale
     let raw = app.session.catalog.photo(id).is_some_and(|p| p.develops_raw() && !p.relative_wb());
@@ -327,6 +331,13 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
                     point_color(app, ui, d);
                 }
             }
+            if focus.as_deref() == Some("color") {
+                let row = flyout_row(ui, "calibration", crate::i18n::tr("Calibration"), Icon::Sliders, false);
+                register(ui.ctx(), "mobileEdit:calibration", row.rect);
+                if row.clicked() {
+                    set_mobile_edit_focus(ui.ctx(), "calibration");
+                }
+            }
         }
         let focused = focus.as_deref() == Some("grading");
         let open = focused || (focus.is_none() && app.ui.flyout_open("grading"));
@@ -471,20 +482,16 @@ fn set_mobile_edit_focus(ctx: &egui::Context, focus: &str) {
     });
 }
 
-fn mobile_edit_navigation(ui: &mut egui::Ui) -> String {
+pub(super) fn mobile_edit_navigation(ui: &mut egui::Ui) {
     let key = egui::Id::new("mobile-edit-category");
     let mut focus = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| "light".into());
-    ui.horizontal_wrapped(|ui| {
-        for (id, label) in [
-            ("light", "Light"),
-            ("color", "Color"),
-            ("effects", "Effects"),
-            ("detail", "Detail"),
-            ("optics", "Optics"),
-            ("calibration", "Calibration"),
-        ] {
-            let selected = focus == id || (id == "light" && focus == "curve") || (id == "color" && focus == "grading");
-            let r = ui.selectable_label(selected, crate::i18n::tr(label));
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        let width = ((ui.available_width() - 16.0) / 5.0).max(44.0);
+        for (id, label) in [("light", "Light"), ("color", "Color"), ("effects", "Effects"), ("detail", "Detail"), ("optics", "Optics")] {
+            let selected =
+                focus == id || (id == "light" && focus == "curve") || (id == "color" && matches!(focus.as_str(), "grading" | "calibration"));
+            let r = ui.add_sized([width, 44.0], egui::Button::new(crate::i18n::tr(label)).selected(selected));
             register(ui.ctx(), format!("mobileEdit:{id}"), r.rect);
             if r.clicked() {
                 focus = id.into();
@@ -492,7 +499,6 @@ fn mobile_edit_navigation(ui: &mut egui::Ui) -> String {
             }
         }
     });
-    focus
 }
 
 /// The profile dropdown: Favorites, Recent, one submenu per group, then favourite toggle and

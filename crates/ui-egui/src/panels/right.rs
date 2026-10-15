@@ -32,6 +32,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
             super::empty_message(ui, r, "No photo selected", "Select a photo to edit");
             return;
         };
+        if app.ui.right == RightPanel::Edit && super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx()) {
+            super::edit::mobile_edit_navigation(ui);
+        }
         let reset_edit_scroll = matches!(app.ui.right, RightPanel::Edit | RightPanel::Crop)
             && super::compact::is_compact(ui.ctx())
             && crate::widgets::touch_screen(ui.ctx())

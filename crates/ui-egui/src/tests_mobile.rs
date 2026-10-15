@@ -758,13 +758,40 @@ fn small_phone_shows_all_edit_mask_and_crop_choices_without_sideways_scrolling()
             assert!(r.left() >= sheet.left() && r.right() <= sheet.right(), "{id} fits horizontally: {r:?} in {sheet:?}");
         }
     };
-    all_fit(&h, &["mobileEdit:light", "mobileEdit:color", "mobileEdit:effects", "mobileEdit:detail", "mobileEdit:optics", "mobileEdit:calibration"]);
+    all_fit(&h, &["mobileEdit:light", "mobileEdit:color", "mobileEdit:effects", "mobileEdit:detail", "mobileEdit:optics"]);
+    assert!(widget(&h, "mobileEdit:calibration").is_none(), "Calibration belongs inside Color rather than a wrapped primary tab");
     click(&mut h, "icon:crop");
     all_fit(&h, &["mobileCrop:free", "mobileCrop:original", "mobileCrop:1x1", "mobileCrop:4x5", "mobileCrop:16x9"]);
     click(&mut h, "icon:masking");
     h.app.run("mask.add", json!({"kind": "linear"})).unwrap();
     h.settle(SETTLE);
     all_fit(&h, &["mobileMask:Light", "mobileMask:Color", "mobileMask:Effects", "mobileMask:Detail"]);
+}
+
+#[test]
+fn phone_edit_categories_remain_above_scrolling_controls_and_preserve_edits() {
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        let photo = h.app.session.active().unwrap();
+        let sheet = widget(&h, "panel:sheet").unwrap();
+        let category = widget(&h, "mobileEdit:light").unwrap();
+        assert!(category.top() >= sheet.top() && category.bottom() < sheet.center().y);
+        h.app.run("develop.set", json!({"control":"light.exposure", "value":0.7})).unwrap();
+        h.request("ui.move", json!({"x":sheet.center().x, "y":sheet.bottom() - 54.0}), SETTLE);
+        h.request("ui.scroll", json!({"dy":-300.0}), SETTLE);
+        h.step();
+        assert!((widget(&h, "mobileEdit:light").unwrap().top() - category.top()).abs() < 2.0);
+        let selected = h.app.session.selection.clone();
+        let image = h.app.image_rect.unwrap();
+        for name in ["color", "effects", "detail", "optics", "light"] {
+            assert_eq!(h.request("ui.clickWidget", json!({"id":format!("mobileEdit:{name}")}), SETTLE)["ok"], true);
+        }
+        assert_eq!(h.app.session.selection, selected);
+        assert_eq!(h.app.session.active(), Some(photo));
+        assert_eq!(h.app.ui.zoom, crate::state::Zoom::Fit);
+        assert!((h.app.image_rect.unwrap().center().x - image.center().x).abs() < 2.0);
+        assert!((h.app.session.develop_of(photo).unwrap().light.exposure - 0.7).abs() < 0.001);
+    }
 }
 
 /// Photos in the grid whose middle is on screen (between the header and `bottom`).
@@ -1346,10 +1373,9 @@ fn small_phone_color_mixer_bands_are_finger_sized_and_selectable() {
     let scroll = h.request("ui.scroll", json!({"dy": -300.0}), SETTLE);
     assert_eq!(scroll["ok"], true, "{scroll}");
     h.step();
-    let scroll = h.request("ui.scroll", json!({"dy": -150.0}), SETTLE);
-    assert_eq!(scroll["ok"], true, "{scroll}");
-    h.step();
+    h.settle(SETTLE);
     let band_rect = widget(&h, &format!("mixerBand:{target}")).expect("band");
+    assert!(band_rect.top() >= widget(&h, "mobileEdit:light").unwrap().bottom(), "band must be below the pinned navigation");
     assert!(band_rect.bottom() <= sheet.bottom(), "band must be visible for touch: {band_rect:?} in {sheet:?}");
     let r = h.request("ui.clickWidget", json!({"id": format!("mixerBand:{target}")}), SETTLE);
     assert_eq!(r["ok"], true, "{r}");
