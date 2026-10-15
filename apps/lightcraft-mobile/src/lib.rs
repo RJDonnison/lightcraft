@@ -612,6 +612,7 @@ pub fn run(mut options: eframe::NativeOptions, library_dir: std::path::PathBuf) 
             let export_dir = library_dir.with_file_name("LightCraft Exports").to_string_lossy().to_string();
             let _ = PICKED_DIR.set(library_dir.join("Picked"));
             let mut s = Session::new().with_fs().with_system_clock();
+            s.mobile_mask_model_gate = true;
             let t0 = std::time::Instant::now();
             match s.open_library(&library_dir, true) {
                 Ok(r) => {

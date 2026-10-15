@@ -478,6 +478,33 @@ fn mask_move_with_extreme_deltas() {
 }
 
 #[test]
+fn mobile_mask_creation_refuses_model_kinds_at_command_boundary() {
+    let mut s = demo();
+    s.mobile_mask_model_gate = true;
+    let photo = s.active().unwrap();
+    s.execute("mask.add", &json!({"kind":"linear"})).unwrap();
+    let count = s.develop_of(photo).unwrap().masks.len();
+    let undo = s.undo.len();
+    for kind in ["subject", "sky", "background", "object", "prompt"] {
+        for (command, params) in [
+            ("mask.add", json!({"kind":kind,"text":"sky"})),
+            ("mask.addComponent", json!({"kind":kind,"op":"add","text":"sky"})),
+            ("mask.addComponent", json!({"kind":kind,"op":"subtract","text":"sky"})),
+            ("mask.addComponent", json!({"kind":kind,"op":"intersect","text":"sky"})),
+        ] {
+            let error = s.execute(command, &params).unwrap_err().to_string();
+            assert!(error.contains("unavailable"), "{command} {kind}: {error}");
+            assert_eq!(s.develop_of(photo).unwrap().masks.len(), count);
+            assert_eq!(s.undo.len(), undo);
+        }
+    }
+    s.execute("mask.addComponent", &json!({"kind":"colorRange","op":"subtract"})).unwrap();
+    assert_eq!(s.develop_of(photo).unwrap().masks[0].components.len(), 2);
+    s.mobile_mask_model_gate = false;
+    s.execute("mask.add", &json!({"kind":"subject"})).unwrap();
+}
+
+#[test]
 fn masks_reorder_and_duplicate_and_invert() {
     let mut s = demo();
     for kind in ["linear", "radial", "brush"] {

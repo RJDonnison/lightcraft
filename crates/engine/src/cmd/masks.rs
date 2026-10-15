@@ -52,6 +52,13 @@ fn shape_from(kind: &str, p: &Value, c: &str) -> Result<MaskShape> {
     })
 }
 
+fn mobile_creation_gate(s: &Session, kind: &str, command: &str) -> Result<()> {
+    if s.mobile_mask_model_gate && matches!(kind, "subject" | "sky" | "background" | "object" | "prompt") {
+        return Err(bad(command, format!("{kind} masks require AI models unavailable in this mobile build")));
+    }
+    Ok(())
+}
+
 /// `[[x, y], …]` normalized points under `key`.
 fn points(p: &Value, key: &str) -> Vec<Point> {
     p.get(key)
@@ -169,6 +176,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_active,
             |s, p| {
                 let kind = str_param(p, "kind").unwrap_or("radial").to_string();
+                mobile_creation_gate(s, &kind, "mask.add")?;
                 let mut shape = shape_from(&kind, p, "mask.add")?;
                 let later = resolve_ai(s, &mut shape, "mask.add")?;
                 let name = str_param(p, "name").map(str::to_string);
@@ -200,6 +208,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_active,
             |s, p| {
                 let kind = str_param(p, "kind").unwrap_or("brush").to_string();
+                mobile_creation_gate(s, &kind, "mask.addComponent")?;
                 let op: MaskOp =
                     serde_json::from_value(p.get("op").cloned().unwrap_or(json!("add"))).map_err(|e| bad("mask.addComponent", e.to_string()))?;
                 let active = s.active_mask;

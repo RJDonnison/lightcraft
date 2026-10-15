@@ -248,6 +248,9 @@ pub struct Session {
     depth: u32,
     /// Selected mask (Masking panel), by mask id.
     pub active_mask: Option<u32>,
+    /// Mobile shell capability: this build does not ship AI mask creation models. The command
+    /// boundary enforces it too, including requests from control/MCP and component operations.
+    pub mobile_mask_model_gate: bool,
     /// AI masks (SAM 3): the model and the last photo prepared for it.
     pub segmenter: segment::Segmenter,
     /// Selected spot (Remove panel), by index into the active photo's spots.
@@ -375,6 +378,7 @@ impl Session {
             clock: Box::new(|| "2026-09-30T12:00:00".to_string()),
             depth: 0,
             active_mask: None,
+            mobile_mask_model_gate: false,
             segmenter: segment::Segmenter::default(),
             active_spot: None,
             library: None,

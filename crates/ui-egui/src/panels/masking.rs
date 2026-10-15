@@ -317,19 +317,22 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
 }
 
 fn create_mask_choices(app: &mut LightcraftApp, ui: &mut egui::Ui, t: Tokens) {
-    ui.label(egui::RichText::new(crate::i18n::tr("Create New Mask")).color(t.text_dim));
-    ui.add_space(6.0);
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
+    if !mobile {
+        ui.label(egui::RichText::new(crate::i18n::tr("Create New Mask")).color(t.text_dim));
+        ui.add_space(6.0);
+    }
     let tiles: [(&str, &str, Icon); 10] = [
-        ("object", "Object", Icon::Subject),
-        ("prompt", "Describe", Icon::Subject),
-        ("subject", "Subject", Icon::Subject),
-        ("sky", "Sky", Icon::Sky),
-        ("background", "Background", Icon::Subject),
         ("brush", "Brush", Icon::Brush),
         ("linear", "Linear", Icon::Linear),
         ("radial", "Radial", Icon::Radial),
         ("luminanceRange", "Luminance", Icon::Sliders),
         ("colorRange", "Color", Icon::Picker),
+        ("subject", "Subject", Icon::Subject),
+        ("sky", "Sky", Icon::Sky),
+        ("background", "Background", Icon::Subject),
+        ("object", "Object", Icon::Subject),
+        ("prompt", "Describe", Icon::Subject),
     ];
     // four 52 pt tiles a row when they and their labels fit, else fewer (wider for a long label)
     let widest = |size: f32| {
@@ -339,21 +342,31 @@ fn create_mask_choices(app: &mut LightcraftApp, ui: &mut egui::Ui, t: Tokens) {
             .map(|(_, l, _)| ui.painter().layout_no_wrap(crate::i18n::tr(l).to_string(), font.clone(), t.text_dim).size().x)
             .fold(0.0, f32::max)
     };
-    let (cols, tile, size) = tile_layout(ui.available_width(), widest);
+    let (cols, tile, size) =
+        if mobile { (2, ((ui.available_width() - TILE_GAP) / 2.0).max(44.0), 12.0) } else { tile_layout(ui.available_width(), widest) };
     egui::Grid::new("mask-tiles").spacing(vec2(TILE_GAP, TILE_GAP)).show(ui, |ui| {
         for (i, (kind, label, icon)) in tiles.iter().enumerate() {
-            let (r, resp) = ui.allocate_exact_size(vec2(tile, 52.0), Sense::click());
+            let unavailable = mobile && matches!(*kind, "object" | "prompt" | "subject" | "sky" | "background");
+            let (r, resp) =
+                ui.allocate_exact_size(vec2(tile, if mobile { 60.0 } else { 52.0 }), if unavailable { Sense::hover() } else { Sense::click() });
             register(ui.ctx(), format!("maskNew:{kind}"), r);
             ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.hover } else { t.inset });
-            paint(ui.painter(), Rect::from_center_size(r.center() - vec2(0.0, 7.0), vec2(20.0, 20.0)), *icon, t.text_label);
+            let color = if unavailable { t.text_disabled } else { t.text_label };
+            paint(ui.painter(), Rect::from_center_size(r.center() - vec2(0.0, 7.0), vec2(20.0, 20.0)), *icon, color);
             // (cut short only in a panel too narrow for the label: the full name on hover)
             let label = crate::i18n::tr(label);
             let g = one_line(ui.painter(), label, t.font(size), t.text_dim, tile - 2.0 * TILE_PAD);
             let elided = g.elided;
             let at = pos2(r.center().x, r.bottom() - 9.0) - g.size() / 2.0;
             register(ui.ctx(), format!("maskNewLabel:{kind}"), Rect::from_min_size(at, g.size()));
-            ui.painter().galley(at, g, t.text_dim);
-            let resp = if elided { resp.on_hover_text(label) } else { resp };
+            ui.painter().galley(at, g, color);
+            let resp = if unavailable {
+                resp.on_hover_text(crate::i18n::tr("AI models are unavailable in this mobile build"))
+            } else if elided {
+                resp.on_hover_text(label)
+            } else {
+                resp
+            };
             if resp.clicked() {
                 match *kind {
                     "colorRange" => {
@@ -386,7 +399,11 @@ fn create_mask_choices(app: &mut LightcraftApp, ui: &mut egui::Ui, t: Tokens) {
             }
         }
     });
-    describe_field(app, ui, true);
+    if mobile {
+        ui.add(egui::Label::new(crate::i18n::tr("AI selections need models unavailable in this mobile build.")).wrap());
+    } else {
+        describe_field(app, ui, true);
+    }
 }
 
 fn selected_mask_management(app: &mut LightcraftApp, ui: &mut egui::Ui, t: Tokens, m: &lightcraft_develop::Mask) {
@@ -475,6 +492,7 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
     let t = Tokens::get(ctx);
     let Some(d) = app.session.develop_of(id) else { return };
     let management_key = egui::Id::new("mobile-mask-management-open");
+    let chooser_key = egui::Id::new("mobile-mask-create-open");
     let left = canvas.right() - 58.0;
     let height = (canvas.height() - 12.0).max(0.0);
     egui::Area::new(egui::Id::new("mobile-mask-rail")).order(egui::Order::Foreground).fixed_pos(pos2(left, canvas.top() + 6.0)).show(ctx, |ui| {
@@ -482,11 +500,16 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
             ui.set_width(48.0);
             let add = icon_button(ui, "mobileMaskRail:add", Icon::Plus, vec2(48.0, 44.0), false, true, "Create New Mask");
             register(ctx, "mobileMaskRail:add", add.rect);
-            egui::Popup::menu(&add).show(|ui| {
-                ui.set_min_width(270.0);
-                create_mask_choices(app, ui, t);
-                mask_progress(app, ui, t);
-            });
+            if add.clicked() {
+                ctx.data_mut(|data| {
+                    if data.get_temp::<bool>(chooser_key).unwrap_or(false) {
+                        data.remove::<bool>(chooser_key);
+                    } else {
+                        data.insert_temp(chooser_key, true);
+                    }
+                    data.remove::<u32>(management_key);
+                });
+            }
             ui.separator();
             egui::ScrollArea::vertical().id_salt("mobile-mask-rail-list").max_height((height - 155.0).max(44.0)).show(ui, |ui| {
                 app.renderer.want_variants(d.masks.len().min(32));
@@ -565,6 +588,34 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
             egui::Popup::menu(&overlay).show(|ui| overlay_options(app, ui));
         });
     });
+    if ctx.data(|data| data.get_temp::<bool>(chooser_key)).unwrap_or(false) {
+        let width = (canvas.width() - 24.0).clamp(180.0, 440.0);
+        let height = (canvas.height() * 0.72).clamp(120.0, if canvas.width() > canvas.height() { 175.0 } else { 410.0 });
+        let at = pos2(canvas.center().x - width / 2.0, canvas.bottom() - height - 6.0);
+        egui::Area::new(egui::Id::new("mobile-mask-create")).order(egui::Order::Foreground).fixed_pos(at).show(ctx, |ui| {
+            egui::Frame::NONE.fill(t.chrome).corner_radius(10.0).inner_margin(12.0).show(ui, |ui| {
+                ui.set_width(width - 24.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(crate::i18n::tr("Create New Mask")).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let close = ui.add_sized([60.0, 44.0], egui::Button::new(crate::i18n::tr("Close")));
+                        register(ctx, "mobileMaskCreate:close", close.rect);
+                        if close.clicked() {
+                            ctx.data_mut(|data| data.remove::<bool>(chooser_key));
+                        }
+                    });
+                });
+                egui::ScrollArea::vertical().id_salt("mobile-mask-create-list").max_height(height - 70.0).show(ui, |ui| {
+                    let before = app.session.active_mask;
+                    create_mask_choices(app, ui, t);
+                    mask_progress(app, ui, t);
+                    if app.session.active_mask != before || app.ui.tool == "brush" {
+                        ctx.data_mut(|data| data.remove::<bool>(chooser_key));
+                    }
+                });
+            });
+        });
+    }
     if let Some(m) = d.masks.iter().find(|m| Some(m.id) == app.session.active_mask) {
         let options_x = (left - 92.0).max(canvas.left() + 4.0);
         egui::Area::new(egui::Id::new("mobile-mask-options")).order(egui::Order::Foreground).fixed_pos(pos2(options_x, canvas.top() + 6.0)).show(
@@ -1071,12 +1122,13 @@ fn describe_field(app: &mut LightcraftApp, ui: &mut egui::Ui, new_mask: bool) {
 }
 
 fn component_menu(app: &mut LightcraftApp, ui: &mut egui::Ui, op: &str) {
-    let b = ui.button(crate::i18n::tr("Object"));
+    let mobile = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
+    let b = ui.add_enabled(!mobile, egui::Button::new(crate::i18n::tr("Object")));
     register(ui.ctx(), format!("maskComp:{op}:object"), b.rect);
     if b.clicked() {
         start_object(app, ui.ctx(), op);
     }
-    let b = ui.button(crate::i18n::tr("Describe…"));
+    let b = ui.add_enabled(!mobile, egui::Button::new(crate::i18n::tr("Describe…")));
     register(ui.ctx(), format!("maskComp:{op}:prompt"), b.rect);
     if b.clicked() {
         start_describe(app, op);
@@ -1093,7 +1145,7 @@ fn component_menu(app: &mut LightcraftApp, ui: &mut egui::Ui, op: &str) {
         if kind == "brush" && op == "intersect" {
             continue;
         }
-        let b = ui.button(menu_label(label));
+        let b = ui.add_enabled(!mobile || !matches!(kind, "sky" | "subject"), egui::Button::new(menu_label(label)));
         register(ui.ctx(), format!("maskComp:{op}:{kind}"), b.rect);
         if b.clicked() {
             if kind == "brush" {

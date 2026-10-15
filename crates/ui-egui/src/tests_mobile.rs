@@ -1295,6 +1295,57 @@ fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
 }
 
 #[test]
+fn phone_mask_creation_is_large_cancellable_and_gates_model_kinds() {
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        h.app.session.mobile_mask_model_gate = true;
+        h.app.run("panel.masking", json!({})).unwrap();
+        h.app.run("mask.add", json!({"kind":"radial"})).unwrap();
+        h.settle(SETTLE);
+        let photo = h.app.session.active().unwrap();
+        let selected = h.app.session.active_mask;
+        let count = h.app.session.develop_of(photo).unwrap().masks.len();
+        let open = h.request("ui.clickWidget", json!({"id":"mobileMaskRail:add"}), SETTLE);
+        assert_eq!(open["ok"], true, "{open}");
+        h.step();
+        let brush = widget(&h, "maskNew:brush").unwrap();
+        assert!(brush.width() >= 100.0 && brush.height() >= 60.0, "large creation targets at {size:?}");
+        let close = widget(&h, "mobileMaskCreate:close").unwrap();
+        assert!(h.app.canvas_rect.unwrap().contains(close.center()));
+        let pos = brush.center();
+        let moved = h.request("ui.move", json!({"x":pos.x,"y":pos.y}), SETTLE);
+        assert_eq!(moved["ok"], true, "{moved}");
+        let scrolled = h.request("ui.scroll", json!({"dy":-110.0}), SETTLE);
+        assert_eq!(scrolled["ok"], true, "{scrolled}");
+        h.settle(SETTLE);
+        let disabled = widget(&h, "maskNew:subject").unwrap();
+        assert!(disabled.center().y > close.bottom(), "disabled choice is visible below the header");
+        let sky = h.request("ui.clickWidget", json!({"id":"maskNew:subject"}), SETTLE);
+        assert_eq!(sky["ok"], true, "{sky}");
+        h.step();
+        assert_eq!(h.app.session.active_mask, selected);
+        assert_eq!(h.app.session.develop_of(photo).unwrap().masks.len(), count);
+        let cancel = h.request("ui.clickWidget", json!({"id":"mobileMaskCreate:close"}), SETTLE);
+        assert_eq!(cancel["ok"], true, "{cancel}");
+        h.step();
+        assert!(widget(&h, "mobileMaskCreate:close").is_none());
+        assert_eq!(h.app.session.active_mask, selected);
+        assert_eq!(h.app.session.develop_of(photo).unwrap().masks.len(), count);
+        let open = h.request("ui.clickWidget", json!({"id":"mobileMaskRail:add"}), SETTLE);
+        assert_eq!(open["ok"], true, "{open}");
+        let pos = widget(&h, "mobileMaskCreate:close").unwrap().center() + egui::vec2(-80.0, 70.0);
+        h.request("ui.move", json!({"x":pos.x,"y":pos.y}), SETTLE);
+        h.request("ui.scroll", json!({"dy":300.0}), SETTLE);
+        h.settle(SETTLE);
+        let add = h.request("ui.clickWidget", json!({"id":"maskNew:linear"}), SETTLE);
+        assert_eq!(add["ok"], true, "{add}");
+        h.step();
+        assert_eq!(h.app.session.develop_of(photo).unwrap().masks.len(), count + 1);
+        assert_ne!(h.app.session.active_mask, selected);
+    }
+}
+
+#[test]
 fn phone_floating_mask_options_manage_only_the_selected_mask() {
     let click = |h: &mut Headless, id: &str| {
         let result = h.request("ui.clickWidget", json!({"id":id}), SETTLE);
