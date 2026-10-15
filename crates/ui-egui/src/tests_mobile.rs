@@ -1284,14 +1284,52 @@ fn phone_mask_rail_selects_masks_without_replacing_adjustments() {
     let r = h.request("ui.clickWidget", json!({"id": "mobileMaskRail:add"}), Duration::from_secs(20));
     assert_eq!(r["ok"], true, "{r}");
     h.step();
-    assert!(widget(&h, "mobileMaskRail:manage").is_none(), "management has no separate ellipsis control");
-    let r = h.request("ui.clickWidget", json!({"id": format!("mask:{}", masks[0].id), "button": "right"}), Duration::from_secs(20));
+    assert!(widget(&h, "mobileMask:options").is_some(), "management has a separate floating Options control");
+    let r = h.request("ui.clickWidget", json!({"id": "mobileMask:options"}), Duration::from_secs(20));
     assert_eq!(r["ok"], true, "{r}");
     h.step();
-    assert!(widget(&h, "button:maskAddComp").is_some(), "the side rail opens component management");
-    assert!(widget(&h, "component:0").is_some(), "the component tree lives in rail management");
+    assert!(widget(&h, "button:maskAddComp").is_some(), "Options opens floating component management");
+    assert!(widget(&h, "component:0").is_some(), "the component tree lives in floating management");
     h.settle(SETTLE);
     assert!(widget(&h, &format!("mobileMaskRail:preview:{}", masks[0].id)).is_some(), "effective mask has a white-on-black preview");
+}
+
+#[test]
+fn phone_floating_mask_options_manage_only_the_selected_mask() {
+    let click = |h: &mut Headless, id: &str| {
+        let result = h.request("ui.clickWidget", json!({"id":id}), SETTLE);
+        assert_eq!(result["ok"], true, "{id}: {result}");
+        h.step();
+    };
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        h.app.run("panel.masking", json!({})).unwrap();
+        h.app.run("mask.add", json!({"kind":"linear"})).unwrap();
+        h.app.run("mask.adjust", json!({"values":{"exposure":0.6}})).unwrap();
+        h.app.run("mask.add", json!({"kind":"radial"})).unwrap();
+        h.settle(SETTLE);
+        let photo = h.app.session.active().unwrap();
+        let before = h.app.session.develop_of(photo).unwrap().masks.clone();
+        let rail = widget(&h, "mobileMaskRail:add").unwrap();
+        let options = widget(&h, "mobileMask:options").unwrap();
+        let canvas = h.app.canvas_rect.unwrap();
+        assert!(canvas.contains(options.center()) && options.right() <= rail.left(), "Options stays next to the floating stack at {size:?}");
+        assert!(widget(&h, "button:maskInvert").is_none(), "management starts closed");
+        click(&mut h, "mobileMask:options");
+        let invert = widget(&h, "button:maskInvert").unwrap();
+        assert!(canvas.contains(invert.center()), "management stays on the photo at {size:?}");
+        assert!(widget(&h, "component:0").is_some());
+        click(&mut h, "button:maskInvert");
+        let after = h.app.session.develop_of(photo).unwrap().masks.clone();
+        assert_eq!(after[0].invert, before[0].invert);
+        assert_ne!(after[1].invert, before[1].invert);
+        click(&mut h, &format!("mask:{}", before[0].id));
+        assert!(widget(&h, "button:maskInvert").is_none(), "selection closes the old management");
+        assert_eq!(h.app.session.active_mask, Some(before[0].id));
+        assert_eq!(h.app.session.develop_of(photo).unwrap().masks[0].adjust.exposure, 0.6);
+        click(&mut h, "mobileMask:options");
+        assert!(widget(&h, "component:0").is_some(), "the newly selected mask has its own management");
+    }
 }
 
 #[test]
@@ -1368,7 +1406,7 @@ fn focused_mask_tile_opens_management_from_keyboard_without_a_hold() {
     }]);
     h.step();
     assert!(widget(&h, "button:maskAddComp").is_some(), "keyboard users can manage the focused tile");
-    assert!(widget(&h, "mobileMaskRail:manage").is_none());
+    assert!(widget(&h, "mobileMask:options").is_some());
 }
 
 #[test]

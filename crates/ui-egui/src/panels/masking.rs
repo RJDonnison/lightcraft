@@ -474,6 +474,7 @@ fn selected_mask_management(app: &mut LightcraftApp, ui: &mut egui::Ui, t: Token
 pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, id: PhotoId) {
     let t = Tokens::get(ctx);
     let Some(d) = app.session.develop_of(id) else { return };
+    let management_key = egui::Id::new("mobile-mask-management-open");
     let left = canvas.right() - 58.0;
     let height = (canvas.height() - 12.0).max(0.0);
     egui::Area::new(egui::Id::new("mobile-mask-rail")).order(egui::Order::Foreground).fixed_pos(pos2(left, canvas.top() + 6.0)).show(ctx, |ui| {
@@ -526,7 +527,7 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
                     if selected {
                         ui.painter().rect_stroke(rect.shrink(2.0), 5.0, Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
                     }
-                    let response = response.on_hover_text(format!("{} — hold or press Shift+F10 to manage", m.name));
+                    let response = response.on_hover_text(format!("{} — use Options to manage", m.name));
                     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &m.name));
                     let keyboard_manage = response.has_focus()
                         && ui.input(|i| {
@@ -537,23 +538,11 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
                     let manage = response.secondary_clicked() || keyboard_manage;
                     if manage {
                         let _ = app.run("mask.select", json!({"id": m.id}));
-                        egui::Popup::open_id(ctx, egui::Popup::default_response_id(&response));
+                        ctx.data_mut(|data| data.insert_temp(management_key, m.id));
                     } else if response.clicked() {
                         let _ = app.run("mask.select", json!({"id": m.id}));
+                        ctx.data_mut(|data| data.remove::<u32>(management_key));
                     }
-                    egui::Popup::context_menu(&response).at_position(pos2((rect.left() - 284.0).max(canvas.left() + 4.0), rect.top())).show(|ui| {
-                        ui.set_min_width(280.0);
-                        egui::ScrollArea::vertical().max_height((canvas.height() - 60.0).max(160.0)).show(ui, |ui| {
-                            ui.label(egui::RichText::new(&m.name).strong());
-                            ui.menu_button(crate::i18n::tr("Mask options"), |ui| {
-                                if let Some(index) = d.masks.iter().position(|item| item.id == m.id) {
-                                    mask_menu(app, ui, m.id, &m.name, m.visible, index, d.masks.len());
-                                }
-                            });
-                            selected_mask_management(app, ui, t, m);
-                            mask_progress(app, ui, t);
-                        });
-                    });
                 }
             });
             if let Some(m) = d.masks.iter().find(|m| Some(m.id) == app.session.active_mask) {
@@ -576,6 +565,57 @@ pub fn mobile_rail(app: &mut LightcraftApp, ctx: &egui::Context, canvas: Rect, i
             egui::Popup::menu(&overlay).show(|ui| overlay_options(app, ui));
         });
     });
+    if let Some(m) = d.masks.iter().find(|m| Some(m.id) == app.session.active_mask) {
+        let options_x = (left - 92.0).max(canvas.left() + 4.0);
+        egui::Area::new(egui::Id::new("mobile-mask-options")).order(egui::Order::Foreground).fixed_pos(pos2(options_x, canvas.top() + 6.0)).show(
+            ctx,
+            |ui| {
+                egui::Frame::NONE.fill(t.chrome).corner_radius(8.0).inner_margin(4.0).show(ui, |ui| {
+                    let open = ctx.data(|data| data.get_temp::<u32>(management_key)) == Some(m.id);
+                    let response = ui.add_sized([76.0, 44.0], egui::Button::new(crate::i18n::tr("Options")).selected(open));
+                    register(ctx, "mobileMask:options", response.rect);
+                    if response.clicked() {
+                        ctx.data_mut(|data| {
+                            if open {
+                                data.remove::<u32>(management_key);
+                            } else {
+                                data.insert_temp(management_key, m.id);
+                            }
+                        });
+                    }
+                });
+            },
+        );
+        if ctx.data(|data| data.get_temp::<u32>(management_key)) == Some(m.id) {
+            let width = (canvas.width() - 72.0).clamp(220.0, 340.0);
+            let x = (canvas.right() - width - 62.0).max(canvas.left() + 4.0);
+            egui::Area::new(egui::Id::new("mobile-mask-management")).order(egui::Order::Foreground).fixed_pos(pos2(x, canvas.top() + 54.0)).show(
+                ctx,
+                |ui| {
+                    egui::Frame::NONE.fill(t.chrome).corner_radius(8.0).inner_margin(4.0).show(ui, |ui| {
+                        ui.set_width(width.min((canvas.right() - x).max(0.0)));
+                        egui::ScrollArea::vertical().id_salt("mobile-mask-management-scroll").max_height((canvas.height() - 62.0).max(60.0)).show(
+                            ui,
+                            |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.add(egui::Label::new(egui::RichText::new(&m.name).strong()).truncate());
+                                    ui.menu_button(crate::i18n::tr("Mask actions"), |ui| {
+                                        if let Some(index) = d.masks.iter().position(|item| item.id == m.id) {
+                                            mask_menu(app, ui, m.id, &m.name, m.visible, index, d.masks.len());
+                                        }
+                                    });
+                                });
+                                selected_mask_management(app, ui, t, m);
+                                mask_progress(app, ui, t);
+                            },
+                        );
+                    });
+                },
+            );
+        }
+    } else {
+        ctx.data_mut(|data| data.remove::<u32>(management_key));
+    }
     if app.ui.describe.is_some() {
         egui::Window::new(crate::i18n::tr("Describe Mask")).collapsible(false).show(ctx, |ui| {
             ui.set_min_width(280.0);
