@@ -1038,7 +1038,7 @@ fn phone_editor_bar_opens_crop_masks_curve_and_grading() {
     assert!(widget(&h, "panel:sheet").is_some(), "Done returns to the ordinary Edit sheet");
     click(&mut h, "mobileEdit:color");
     click(&mut h, "mobileEdit:grading");
-    assert!(widget(&h, "icon:grading-3way").is_some(), "color grading controls in the sheet");
+    assert!(widget(&h, "mobileGrading:shadows").is_some(), "color grading controls in the sheet");
 
     click(&mut h, "icon:crop");
     assert!(widget(&h, "mobileCrop:1x1").is_some(), "aspect presets in Crop");
@@ -1129,6 +1129,54 @@ fn phone_curve_channels_keep_independent_points_and_anchor_endpoints() {
         assert!(widget(&h, "mobileEdit:curve").is_some(), "Done returns to Light");
         assert_eq!(h.app.session.active(), Some(photo));
         assert!((h.app.session.develop_of(photo).unwrap().light.exposure - 0.6).abs() < 0.001);
+        assert!(!h.app.session.undo.is_empty());
+    }
+}
+
+#[test]
+fn phone_grading_keeps_four_independent_ranges_and_shared_controls() {
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let mut h = touch_app(ViewMode::Detail, size);
+        let photo = h.app.session.active().unwrap();
+        h.app.run("develop.set", json!({"control":"light.exposure","value":0.4})).unwrap();
+        let color = h.request("ui.clickWidget", json!({"id":"mobileEdit:color"}), SETTLE);
+        assert_eq!(color["ok"], true, "{color}");
+        let open = h.request("ui.clickWidget", json!({"id":"mobileEdit:grading"}), SETTLE);
+        assert_eq!(open["ok"], true, "{open}");
+        h.settle(SETTLE);
+        for (key, hue, lum) in [("shadows", 35, -12), ("midtones", 110, 7), ("highlights", 220, 18), ("global", 295, -5)] {
+            let tab = h.request("ui.clickWidget", json!({"id":format!("mobileGrading:{key}")}), SETTLE);
+            assert_eq!(tab["ok"], true, "{tab}");
+            assert!(widget(&h, &format!("wheel:{key}")).is_some(), "{key} has a wheel");
+            h.app
+                .run(
+                    "develop.set",
+                    json!({"values": {
+                        format!("grading.{key}.hue"): hue,
+                        format!("grading.{key}.sat"): 28,
+                        format!("grading.{key}.lum"): lum
+                    }}),
+                )
+                .unwrap();
+            h.step();
+        }
+        let drag = h.request("ui.dragWidget", json!({"id":"wheel:global","fx":0.6,"fy":0.5,"dx":200.0,"dy":0.0,"steps":10}), SETTLE);
+        assert_eq!(drag["ok"], true, "{drag}");
+        h.app.run("develop.set", json!({"values":{"grading.blending":64,"grading.balance":-14}})).unwrap();
+        h.size = egui::vec2(size[1], size[0]);
+        h.settle(SETTLE);
+        let d = h.app.session.develop_of(photo).unwrap();
+        assert_eq!(d.grading.shadows.hue, 35.0);
+        assert_eq!(d.grading.midtones.hue, 110.0);
+        assert_eq!(d.grading.highlights.hue, 220.0);
+        assert_eq!(d.grading.global.sat, 100.0, "wheel drag clamps saturation at the rim");
+        assert_eq!([d.grading.shadows.lum, d.grading.midtones.lum, d.grading.highlights.lum, d.grading.global.lum], [-12.0, 7.0, 18.0, -5.0]);
+        assert_eq!((d.grading.blending, d.grading.balance), (64.0, -14.0));
+        assert_eq!(d.light.exposure, 0.4);
+        let back = h.request("ui.clickWidget", json!({"id":"mobileEdit:color"}), SETTLE);
+        assert_eq!(back["ok"], true, "{back}");
+        assert!(widget(&h, "mobileEdit:grading").is_some(), "Color remains available after return");
+        assert_eq!(h.app.session.active(), Some(photo));
         assert!(!h.app.session.undo.is_empty());
     }
 }

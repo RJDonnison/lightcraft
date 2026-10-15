@@ -271,6 +271,9 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId) {
             let row = flyout_row(ui, "grading", crate::i18n::tr("Color Grading"), Icon::Presets, false);
             register(ui.ctx(), "mobileEdit:grading", row.rect);
             if row.clicked() {
+                if app.ui.grading_mode == "3way" {
+                    app.ui.grading_mode = "shadows".into();
+                }
                 set_mobile_edit_focus(ui.ctx(), "grading");
             }
         }
@@ -1751,18 +1754,35 @@ const GRADING_TABS: [(&str, &str, Icon); 4] = [
 ];
 
 /// The wheels, in the order of `UiState::grading_hidden`.
-const GRADING_WHEELS: [(&str, &str); 3] = [("shadows", "Shadows"), ("midtones", "Midtones"), ("highlights", "Highlights")];
+const GRADING_WHEELS: [(&str, &str); 4] = [("shadows", "Shadows"), ("midtones", "Midtones"), ("highlights", "Highlights"), ("global", "Global")];
 
 fn grading(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &DevelopSettings, photo: PhotoId) {
-    let mode = GRADING_TABS.iter().find(|(k, ..)| *k == app.ui.grading_mode).map_or("3way", |(k, ..)| *k);
+    let touch = super::compact::is_compact(ui.ctx()) && crate::widgets::touch_screen(ui.ctx());
+    let mode = if touch && app.ui.grading_mode == "global" {
+        "global"
+    } else {
+        GRADING_TABS.iter().find(|(k, ..)| *k == app.ui.grading_mode).map_or("3way", |(k, ..)| *k)
+    };
+    let mode = if touch && mode == "3way" { "shadows" } else { mode };
     egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 6, bottom: 2 }).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            for (key, tip, icon) in GRADING_TABS {
-                if crate::widgets::icon_button(ui, &format!("grading-{key}"), icon, vec2(28.0, 28.0), key == mode, true, crate::i18n::tr(tip))
-                    .clicked()
-                {
-                    app.ui.grading_mode = key.to_string();
+            if touch {
+                let width = ((ui.available_width() - 12.0) / 4.0).max(44.0);
+                for (key, label) in GRADING_WHEELS {
+                    let r = ui.add_sized([width, 44.0], egui::Button::new(crate::i18n::tr(label)).selected(key == mode));
+                    register(ui.ctx(), format!("mobileGrading:{key}"), r.rect);
+                    if r.clicked() {
+                        app.ui.grading_mode = key.into();
+                    }
+                }
+            } else {
+                for (key, tip, icon) in GRADING_TABS {
+                    if crate::widgets::icon_button(ui, &format!("grading-{key}"), icon, vec2(28.0, 28.0), key == mode, true, crate::i18n::tr(tip))
+                        .clicked()
+                    {
+                        app.ui.grading_mode = key.to_string();
+                    }
                 }
             }
         });
@@ -1808,7 +1828,8 @@ fn grading_wheel(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &DevelopSettings
     let wh = match key {
         "shadows" => d.grading.shadows,
         "midtones" => d.grading.midtones,
-        _ => d.grading.highlights,
+        "highlights" => d.grading.highlights,
+        _ => d.grading.global,
     };
     let hidden = app.ui.grading_hidden_for(photo).get(i).copied().unwrap_or(false);
     let r = Rect::from_center_size(c, vec2(rad * 2.0, rad * 2.0));
@@ -1902,7 +1923,7 @@ fn grading_wheel(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &DevelopSettings
         );
     }
     // the eye: on top of the wheel, shown while hovering or while the wheel is hidden
-    if hovering || hidden {
+    if i < 3 && (hovering || hidden) {
         let eye = Rect::from_center_size(r.left_bottom() + vec2(2.0, -2.0), vec2(16.0, 16.0));
         let er = ui.interact(eye, egui::Id::new(("wheelEye", key)), Sense::click());
         register(ui.ctx(), format!("wheelEye:{key}"), eye);
