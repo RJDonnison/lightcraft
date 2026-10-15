@@ -327,9 +327,54 @@ fn small_phone_export_only_shows_controls_the_format_supports() {
     assert!(widget(&h, "mobileExport:quality").is_none(), "PNG does not use lossy quality");
     assert!(widget(&h, "mobileExport:longEdge").is_some());
     assert_eq!(h.request("ui.clickWidget", json!({"id":"mobileExport:format"}), SETTLE)["ok"], true);
+    let original_rect = widget(&h, "mobileExport:original").expect("Original choice");
+    assert_eq!(h.request("ui.move", json!({"x":original_rect.center().x,"y":original_rect.center().y}), SETTLE)["ok"], true);
+    assert_eq!(h.request("ui.scroll", json!({"dy":-180.0}), SETTLE)["ok"], true);
+    h.settle(SETTLE);
     assert_eq!(h.request("ui.clickWidget", json!({"id":"mobileExport:original"}), SETTLE)["ok"], true);
-    assert!(widget(&h, "mobileExport:longEdge").is_none(), "originals are not resized");
+    assert!(
+        widget(&h, "mobileExport:longEdge").is_none(),
+        "originals are not resized; format={:?}; original={original_rect:?}",
+        h.view.ctx.data(|d| d.get_temp::<String>(egui::Id::new("mobile-export-format")))
+    );
     assert!(widget(&h, "mobileExport:quality").is_none());
+}
+
+#[test]
+fn phone_save_share_action_stays_reachable_in_both_orientations() {
+    use std::sync::Arc;
+    for size in [[390.0, 844.0], [844.0, 390.0]] {
+        let services = Services {
+            mobile_export: Some(Arc::new(|_, _| Ok(()))),
+            png: Some(Box::new(|img: &lightcraft_raster::Rgba8| {
+                lightcraft_codecs::encode_png(&lightcraft_codecs::EncodeImage::rgba8(img), &lightcraft_codecs::EncodeMeta::default())
+                    .unwrap_or_default()
+            })),
+            write: Some(Box::new(lightcraft_engine::export::write_file)),
+            ..Default::default()
+        };
+        let mut app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+        app.ui.view = ViewMode::Detail;
+        let mut h = Headless::new(app, size, 1.0);
+        h.input([finger(egui::TouchPhase::Cancel, egui::Pos2::ZERO, 0)]);
+        h.settle(SETTLE);
+        assert_eq!(h.request("ui.clickWidget", json!({"id":"icon:share"}), SETTLE)["ok"], true);
+        let format = widget(&h, "mobileExport:format").expect("format choice");
+        let submit = widget(&h, "mobileExport:submit").expect("save/share action");
+        if let Ok(dir) = std::env::var("LIGHTCRAFT_MUX39_CAPTURE") {
+            let path = format!("{dir}/export-{}x{}.png", size[0] as u32, size[1] as u32);
+            let result = h.request("ui.screenshot", json!({"path":path,"headless":true}), SETTLE);
+            assert_eq!(result["ok"], true, "{result}");
+        }
+        assert!(format.left() >= 16.0 && format.right() <= size[0] - 16.0);
+        assert!(submit.width() > size[0] * 0.75, "action spans the export sheet at {size:?}: {submit:?}");
+        assert!(submit.top() >= 0.0 && submit.bottom() <= size[1], "action stays visible at {size:?}: {submit:?}");
+        assert!(widget(&h, "mobileExport:quality").is_some());
+        assert_eq!(h.request("ui.clickWidget", json!({"id":"mobileExport:format"}), SETTLE)["ok"], true);
+        assert_eq!(h.request("ui.clickWidget", json!({"id":"mobileExport:png"}), SETTLE)["ok"], true);
+        assert!(widget(&h, "mobileExport:quality").is_none());
+        assert!(widget(&h, "mobileExport:submit").is_some());
+    }
 }
 
 #[test]

@@ -241,60 +241,86 @@ fn mobile_export_dialog(app: &mut LightcraftApp, ctx: &egui::Context) {
         format = "jpeg".into();
     }
     let mut open = true;
-    egui::Window::new(crate::i18n::tr("Export"))
+    let choices_id = egui::Id::new("mobile-export-formats-open");
+    let mut choices_open = ctx.data(|d| d.get_temp::<bool>(choices_id)).unwrap_or(false);
+    let width = (ctx.content_rect().width() - 32.0).max(260.0);
+    let controls_height = (ctx.content_rect().height() - 155.0).max(100.0);
+    egui::Window::new(crate::i18n::tr("Save / Share"))
         .collapsible(false)
         .resizable(false)
-        .default_width(260.0)
+        .default_width(width)
+        .min_width(width)
         .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
         .open(&mut open)
         .show(ctx, |ui| {
-            ui.label(crate::i18n::tr("Format"));
-            let formats = egui::ComboBox::from_id_salt("mobile-export-format-select").selected_text(format.to_uppercase()).show_ui(ui, |ui| {
-                for (value, label) in [
-                    ("jpeg", "JPEG"),
-                    ("png", "PNG"),
-                    ("webp", "WebP"),
-                    ("avif", "AVIF"),
-                    ("tiff", "TIFF"),
-                    ("psd", "PSD"),
-                    ("jxl", "JPEG XL"),
-                    ("original", "Original + XMP"),
-                ] {
-                    let response = ui.selectable_value(&mut format, value.into(), label);
-                    register(ui.ctx(), format!("mobileExport:{value}"), response.rect);
+            egui::ScrollArea::vertical().max_height(controls_height).show(ui, |ui| {
+                ui.label(crate::i18n::tr("Format"));
+                let select = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(format!("{}  ·  Change format", format.to_uppercase())));
+                register(ui.ctx(), "mobileExport:format", select.rect);
+                if select.clicked() {
+                    choices_open = !choices_open;
                 }
-                if dng_available {
-                    let response = ui.selectable_value(&mut format, "dng".into(), "DNG");
-                    register(ui.ctx(), "mobileExport:dng", response.rect);
+                if choices_open {
+                    ui.columns(2, |columns| {
+                        for (index, (value, label)) in [
+                            ("jpeg", "JPEG"),
+                            ("png", "PNG"),
+                            ("webp", "WebP"),
+                            ("avif", "AVIF"),
+                            ("tiff", "TIFF"),
+                            ("psd", "PSD"),
+                            ("jxl", "JPEG XL"),
+                            ("original", "Original + XMP"),
+                        ]
+                        .into_iter()
+                        .chain(dng_available.then_some(("dng", "DNG")))
+                        .enumerate()
+                        {
+                            let response = columns[index % 2]
+                                .add_sized([columns[index % 2].available_width(), 44.0], egui::Button::new(label).selected(format == value));
+                            register(columns[index % 2].ctx(), format!("mobileExport:{value}"), response.rect);
+                            if response.clicked() {
+                                format = value.into();
+                                choices_open = false;
+                            }
+                        }
+                    });
+                }
+                if !matches!(format.as_str(), "original" | "dng") {
+                    ui.label(crate::i18n::tr("Long edge (px; 0 = full size)"));
+                    let edge = ui.add_sized([ui.available_width(), 44.0], egui::DragValue::new(&mut long_edge).range(0..=65535).speed(16.0));
+                    register(ui.ctx(), "mobileExport:longEdge", edge.rect);
+                }
+                if matches!(format.as_str(), "jpeg" | "avif" | "jxl") {
+                    let slider =
+                        ui.add_sized([ui.available_width(), 44.0], egui::Slider::new(&mut quality, 1..=100).text(crate::i18n::tr("Quality")));
+                    register(ui.ctx(), "mobileExport:quality", slider.rect);
+                }
+                ui.label(crate::i18n::tr("Export attribution (optional)"));
+                let byline =
+                    ui.add_sized([ui.available_width(), 44.0], egui::TextEdit::singleline(&mut creator).hint_text(crate::i18n::tr("Creator")));
+                register(ui.ctx(), "mobileExport:creator", byline.rect);
+                let rights = ui.add_sized(
+                    [ui.available_width(), 44.0],
+                    egui::TextEdit::singleline(&mut copyright).hint_text(crate::i18n::tr("Copyright notice")),
+                );
+                register(ui.ctx(), "mobileExport:copyright", rights.rect);
+                if matches!(format.as_str(), "original" | "dng") {
+                    ui.small(crate::i18n::tr("Original bytes stay unchanged; attribution is written to its XMP sidecar or new DNG."));
                 }
             });
-            register(ui.ctx(), "mobileExport:format", formats.response.rect);
-            if !matches!(format.as_str(), "original" | "dng") {
-                ui.label(crate::i18n::tr("Long edge (px; 0 = full size)"));
-                let edge = ui.add_sized([ui.available_width(), 44.0], egui::DragValue::new(&mut long_edge).range(0..=65535).speed(16.0));
-                register(ui.ctx(), "mobileExport:longEdge", edge.rect);
-            }
-            if matches!(format.as_str(), "jpeg" | "avif" | "jxl") {
-                let slider = ui.add_sized([ui.available_width(), 44.0], egui::Slider::new(&mut quality, 1..=100).text(crate::i18n::tr("Quality")));
-                register(ui.ctx(), "mobileExport:quality", slider.rect);
-            }
-            ui.label(crate::i18n::tr("Export attribution (optional)"));
-            let byline = ui.add_sized([ui.available_width(), 44.0], egui::TextEdit::singleline(&mut creator).hint_text(crate::i18n::tr("Creator")));
-            register(ui.ctx(), "mobileExport:creator", byline.rect);
-            let rights =
-                ui.add_sized([ui.available_width(), 44.0], egui::TextEdit::singleline(&mut copyright).hint_text(crate::i18n::tr("Copyright notice")));
-            register(ui.ctx(), "mobileExport:copyright", rights.rect);
-            if matches!(format.as_str(), "original" | "dng") {
-                ui.small(crate::i18n::tr("Original bytes stay unchanged; attribution is written to its XMP sidecar or new DNG."));
-            }
-            let note = if format == "original" {
-                "Original: Photos for JPEG/PNG/WebP, otherwise Downloads. XMP: Downloads".to_string()
-            } else {
-                let destination = if matches!(format.as_str(), "jpeg" | "png" | "webp") { "Photos" } else { "Downloads" };
-                format!("Saved to {destination}; sidecars go to Downloads")
+            let destination = match format.as_str() {
+                "jpeg" | "png" | "webp" => "Photos",
+                "original" => "Photos or Downloads (by source type)",
+                _ => "Downloads",
             };
-            ui.label(note);
-            let export = ui.add_sized([ui.available_width(), 44.0], egui::Button::new(crate::i18n::tr("Export")));
+            let size = if matches!(format.as_str(), "original" | "dng") || long_edge == 0 {
+                "full size".to_string()
+            } else {
+                format!("long edge {long_edge}px")
+            };
+            ui.label(format!("{format} · {size} → {destination}; sidecars → Downloads"));
+            let export = ui.add_sized([ui.available_width(), 48.0], egui::Button::new(crate::i18n::tr("Save / Share")));
             register(ui.ctx(), "mobileExport:submit", export.rect);
             if export.clicked() {
                 let mut params = json!({"format": format, "background": true, "mobileDestination": true,
@@ -314,6 +340,7 @@ fn mobile_export_dialog(app: &mut LightcraftApp, ctx: &egui::Context) {
             }
         });
     ctx.data_mut(|d| {
+        d.insert_temp(choices_id, choices_open);
         d.insert_temp(format_id, format);
         d.insert_temp(quality_id, quality);
         d.insert_temp(edge_id, long_edge);
